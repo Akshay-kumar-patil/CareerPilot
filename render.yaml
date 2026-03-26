@@ -1,0 +1,16 @@
+# render.yaml — Render deployment configuration
+services:
+  - type: web
+    name: career-platform-api
+    runtime: python
+    buildCommand: chmod +x build.sh && ./build.sh
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEFAULT_MODEL_PROVIDER
+        value: "auto"

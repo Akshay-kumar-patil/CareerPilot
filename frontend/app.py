@@ -220,10 +220,20 @@ def show_sidebar():
         # AI Status indicator
         ai_status = api.get_ai_status()
         if ai_status:
+            gemini = ai_status.get("gemini_configured", False)
             online = ai_status.get("internet_available", False)
             ollama = ai_status.get("ollama_available", False)
-            status_text = "🟢 Online" if online else ("🟡 Offline (Ollama)" if ollama else "🔴 No AI")
+            if gemini and online:
+                status_text = "🟢 Gemini Online"
+            elif online:
+                status_text = "🟢 Online"
+            elif ollama:
+                status_text = "🟡 Offline (Ollama)"
+            else:
+                status_text = "🔴 No AI"
             st.markdown(f"**AI Status:** {status_text}")
+            if gemini:
+                st.caption(f"Model: {ai_status.get('gemini_model', 'gemini-2.0-flash')}")
             if ai_status.get("estimated_cost_usd", 0) > 0:
                 st.caption(f"Cost: ${ai_status['estimated_cost_usd']:.4f}")
 
@@ -342,19 +352,22 @@ def show_dashboard():
     st.markdown("### 🧠 AI System Status")
     ai_status = api.get_ai_status()
     if ai_status:
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         with c1:
             online = ai_status.get("internet_available", False)
             st.markdown(f"**Internet:** {'🟢 Connected' if online else '🔴 Offline'}")
-            st.markdown(f"**Provider:** {ai_status.get('default_provider', 'auto').title()}")
+            st.markdown(f"**Provider:** {ai_status.get('default_provider', 'gemini').title()}")
         with c2:
+            gemini_ok = ai_status.get("gemini_configured", False)
+            st.markdown(f"**Gemini:** {'🟢 Configured' if gemini_ok else '⚪ Not set'}")
+            st.markdown(f"**Model:** {ai_status.get('gemini_model', 'N/A')}")
+        with c3:
             ollama = ai_status.get("ollama_available", False)
             st.markdown(f"**Ollama:** {'🟢 Running' if ollama else '⚪ Not detected'}")
-            st.markdown(f"**Model:** {ai_status.get('ollama_model', 'N/A')}")
-        with c3:
-            openai_ok = ai_status.get("openai_configured", False)
-            st.markdown(f"**OpenAI:** {'🟢 Configured' if openai_ok else '⚪ Not set'}")
+            st.markdown(f"**OpenAI:** {'🟢 Configured' if ai_status.get('openai_configured') else '⚪ Not set'}")
+        with c4:
             st.markdown(f"**Cost:** ${ai_status.get('estimated_cost_usd', 0):.4f}")
+            st.markdown(f"**Tokens:** {ai_status.get('tokens_used', 0):,}")
 
 
 def show_resume_builder():
@@ -1088,13 +1101,13 @@ def show_settings():
             c1, c2, c3 = st.columns(3)
             with c1:
                 st.markdown(f"**Internet:** {'🟢 Available' if ai_status.get('internet_available') else '🔴 Offline'}")
-                st.markdown(f"**Default Provider:** {ai_status.get('default_provider', 'auto')}")
+                st.markdown(f"**Default Provider:** {ai_status.get('default_provider', 'gemini')}")
             with c2:
-                st.markdown(f"**Ollama:** {'🟢 Running' if ai_status.get('ollama_available') else '⚪ Not detected'}")
-                st.markdown(f"**Ollama Model:** {ai_status.get('ollama_model', 'N/A')}")
+                st.markdown(f"**Gemini:** {'🟢 Configured' if ai_status.get('gemini_configured') else '⚪ Not set'}")
+                st.markdown(f"**Gemini Model:** {ai_status.get('gemini_model', 'N/A')}")
             with c3:
+                st.markdown(f"**Ollama:** {'🟢 Running' if ai_status.get('ollama_available') else '⚪ Not detected'}")
                 st.markdown(f"**OpenAI:** {'🟢 Configured' if ai_status.get('openai_configured') else '⚪ Not set'}")
-                st.markdown(f"**OpenAI Model:** {ai_status.get('openai_model', 'N/A')}")
 
             st.markdown("---")
             st.markdown(f"**Total Tokens Used:** {ai_status.get('tokens_used', 0):,}")
@@ -1104,11 +1117,12 @@ def show_settings():
         st.markdown("### ⚠️ Configuration")
         st.info("To change AI settings, edit the `.env` file in the project root and restart the backend.")
         st.code("""# .env configuration
-OPENAI_API_KEY=sk-your-key-here
-OPENAI_MODEL=gpt-3.5-turbo
+GEMINI_API_KEY=your-gemini-api-key-here
+GEMINI_MODEL=gemini-2.0-flash
+OPENAI_API_KEY=sk-your-key-here  # optional fallback
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.2
-DEFAULT_MODEL_PROVIDER=auto  # openai, ollama, auto
+DEFAULT_MODEL_PROVIDER=gemini  # gemini, openai, ollama, auto
 """, language="bash")
 
     with tab2:

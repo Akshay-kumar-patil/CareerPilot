@@ -24,12 +24,20 @@ class Settings(BaseSettings):
     DATABASE_URL: str = f"sqlite:///{BASE_DIR / 'data' / 'career_platform.db'}"
     CHROMA_PERSIST_DIR: str = str(BASE_DIR / "data" / "chroma_db")
 
-    # AI Models
+    # AI Models - Gemini (primary)
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-2.0-flash"
+
+    # AI Models - OpenAI (fallback)
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-3.5-turbo"
+
+    # AI Models - Ollama (offline fallback)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3.2"
-    DEFAULT_MODEL_PROVIDER: str = "auto"  # "openai", "ollama", "auto"
+
+    # Provider routing
+    DEFAULT_MODEL_PROVIDER: str = "gemini"  # "gemini", "openai", "ollama", "auto"
     AI_MODE: str = "auto"  # "online", "offline", "auto"
 
     # Cost Tracking

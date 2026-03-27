@@ -1,11 +1,12 @@
 """
 API client for Streamlit frontend to communicate with FastAPI backend.
 """
+import os
 import requests
 import streamlit as st
 from typing import Optional, Dict, Any
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = os.environ.get("API_BASE_URL", "https://career-portal-m5re.onrender.com")
 
 
 def _headers() -> dict:

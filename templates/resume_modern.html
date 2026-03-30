@@ -5,139 +5,53 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{ full_name | default('Resume') }}</title>
 <style>
+    /* FIX #10: Google Fonts CDN will fail in offline mode (a core platform feature).
+       Added 'Segoe UI' and 'Arial' as system font fallbacks so the template
+       renders correctly without internet access. */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-        font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
-        color: #1a1a2e;
-        line-height: 1.6;
-        font-size: 10.5pt;
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 40px;
+        font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+        color: #1a1a2e; line-height: 1.6; font-size: 10.5pt;
+        max-width: 800px; margin: 0 auto; padding: 40px;
     }
-
     .header {
-        text-align: center;
-        margin-bottom: 20px;
-        padding-bottom: 15px;
-        border-bottom: 2px solid #6C63FF;
+        text-align: center; margin-bottom: 20px;
+        padding-bottom: 15px; border-bottom: 2px solid #6C63FF;
     }
     .header h1 {
-        font-size: 26pt;
-        font-weight: 700;
-        color: #1a1a2e;
-        margin-bottom: 8px;
-        letter-spacing: 1px;
+        font-size: 26pt; font-weight: 700; color: #1a1a2e;
+        margin-bottom: 8px; letter-spacing: 1px;
     }
-    .contact-info {
-        color: #555;
-        font-size: 9.5pt;
-    }
-    .contact-info span {
-        margin: 0 8px;
-    }
-    .contact-info span:not(:last-child)::after {
-        content: ' | ';
-        color: #ccc;
-        margin-left: 16px;
-    }
-
-    .section {
-        margin-bottom: 18px;
-    }
+    .contact-info { color: #555; font-size: 9.5pt; }
+    .contact-info span { margin: 0 8px; }
+    .contact-info span:not(:last-child)::after { content: ' | '; color: #ccc; margin-left: 16px; }
+    .section { margin-bottom: 18px; }
     .section-title {
-        font-size: 12pt;
-        font-weight: 700;
-        color: #6C63FF;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        margin-bottom: 8px;
-        padding-bottom: 4px;
-        border-bottom: 1px solid #e0e0e0;
+        font-size: 12pt; font-weight: 700; color: #6C63FF;
+        text-transform: uppercase; letter-spacing: 2px;
+        margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #e0e0e0;
     }
-
-    .summary {
-        color: #444;
-        font-size: 10pt;
-        margin-bottom: 10px;
-    }
-
-    .experience-item {
-        margin-bottom: 14px;
-    }
-    .exp-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-    }
-    .exp-title {
-        font-weight: 600;
-        font-size: 11pt;
-    }
-    .exp-company {
-        color: #6C63FF;
-        font-weight: 500;
-    }
-    .exp-dates {
-        color: #888;
-        font-size: 9pt;
-    }
-    .exp-location {
-        color: #888;
-        font-size: 9pt;
-    }
-
-    ul {
-        padding-left: 20px;
-        margin-top: 4px;
-    }
-    ul li {
-        margin-bottom: 3px;
-        color: #333;
-        font-size: 10pt;
-    }
-
-    .skills-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-    }
-    .skill-category {
-        margin-bottom: 4px;
-    }
-    .skill-category-name {
-        font-weight: 600;
-        font-size: 9.5pt;
-        color: #555;
-    }
-    .skill-list {
-        font-size: 9.5pt;
-        color: #333;
-    }
-
-    .edu-item {
-        margin-bottom: 8px;
-    }
-    .edu-degree {
-        font-weight: 600;
-    }
-    .edu-school {
-        color: #6C63FF;
-    }
-
-    .project-item {
-        margin-bottom: 10px;
-    }
-    .project-name {
-        font-weight: 600;
-    }
-    .project-tech {
-        color: #888;
-        font-size: 9pt;
-    }
-
+    .summary { color: #444; font-size: 10pt; margin-bottom: 10px; }
+    .experience-item { margin-bottom: 14px; }
+    .exp-header { display: flex; justify-content: space-between; align-items: baseline; }
+    .exp-title { font-weight: 600; font-size: 11pt; }
+    .exp-company { color: #6C63FF; font-weight: 500; }
+    .exp-dates { color: #888; font-size: 9pt; }
+    .exp-location { color: #888; font-size: 9pt; }
+    ul { padding-left: 20px; margin-top: 4px; }
+    ul li { margin-bottom: 3px; color: #333; font-size: 10pt; }
+    .skills-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .skill-category { margin-bottom: 4px; }
+    .skill-category-name { font-weight: 600; font-size: 9.5pt; color: #555; }
+    .skill-list { font-size: 9.5pt; color: #333; }
+    .edu-item { margin-bottom: 8px; }
+    .edu-degree { font-weight: 600; }
+    .edu-school { color: #6C63FF; }
+    .project-item { margin-bottom: 10px; }
+    .project-name { font-weight: 600; }
+    .project-tech { color: #888; font-size: 9pt; }
     @media print {
         body { padding: 20px; }
         .section-title { color: #333; }
@@ -153,7 +67,9 @@
             {% if contact.email %}<span>{{ contact.email }}</span>{% endif %}
             {% if contact.phone %}<span>{{ contact.phone }}</span>{% endif %}
             {% if contact.linkedin %}<span>{{ contact.linkedin }}</span>{% endif %}
+            {% if contact.github %}<span>{{ contact.github }}</span>{% endif %}
             {% if contact.location %}<span>{{ contact.location }}</span>{% endif %}
+            {% if contact.portfolio %}<span>{{ contact.portfolio }}</span>{% endif %}
         {% endif %}
     </div>
 </div>
@@ -172,20 +88,14 @@
     <div class="experience-item">
         <div class="exp-header">
             <div>
-                <span class="exp-title">{{ exp.title }}</span>
-                <span class="exp-company"> — {{ exp.company }}</span>
+                <span class="exp-title">{{ exp.title | default('') }}</span>
+                <span class="exp-company"> — {{ exp.company | default('') }}</span>
             </div>
-            <div>
-                <span class="exp-dates">{{ exp.dates }}</span>
-            </div>
+            <div><span class="exp-dates">{{ exp.dates | default('') }}</span></div>
         </div>
         {% if exp.location %}<div class="exp-location">{{ exp.location }}</div>{% endif %}
         {% if exp.bullets %}
-        <ul>
-            {% for bullet in exp.bullets %}
-            <li>{{ bullet }}</li>
-            {% endfor %}
-        </ul>
+        <ul>{% for bullet in exp.bullets %}<li>{{ bullet }}</li>{% endfor %}</ul>
         {% endif %}
     </div>
     {% endfor %}
@@ -197,16 +107,12 @@
     <div class="section-title">Education</div>
     {% for edu in education %}
     <div class="edu-item">
-        <span class="edu-degree">{{ edu.degree }}</span>
-        <span class="edu-school"> — {{ edu.school }}</span>
-        <span class="exp-dates"> | {{ edu.dates }}</span>
-        {% if edu.gpa %}<span class="exp-location"> | GPA: {{ edu.gpa }}</span>{% endif %}
+        <span class="edu-degree">{{ edu.degree | default('') }}</span>
+        <span class="edu-school"> — {{ edu.school | default('') }}</span>
+        {% if edu.dates %}<span class="exp-dates"> | {{ edu.dates }}</span>{% endif %}
+        {% if edu.grade %}<span class="exp-location"> | {{ edu.grade }}</span>{% endif %}
         {% if edu.highlights %}
-        <ul>
-            {% for h in edu.highlights %}
-            <li>{{ h }}</li>
-            {% endfor %}
-        </ul>
+        <ul>{% for h in edu.highlights %}<li>{{ h }}</li>{% endfor %}</ul>
         {% endif %}
     </div>
     {% endfor %}
@@ -222,7 +128,9 @@
             {% if skill_list %}
             <div class="skill-category">
                 <span class="skill-category-name">{{ category | replace('_', ' ') | title }}:</span>
-                <span class="skill-list">{{ skill_list | join(', ') }}</span>
+                <span class="skill-list">
+                    {% if skill_list is string %}{{ skill_list }}{% else %}{{ skill_list | join(', ') }}{% endif %}
+                </span>
             </div>
             {% endif %}
             {% endfor %}
@@ -238,12 +146,11 @@
     <div class="section-title">Projects</div>
     {% for proj in projects %}
     <div class="project-item">
-        <span class="project-name">{{ proj.name }}</span>
-        {% if proj.technologies %}
-        <span class="project-tech"> | {{ proj.technologies | join(', ') }}</span>
+        <span class="project-name">{{ proj.name | default('') }}</span>
+        {% if proj.tech_stack %}<span class="project-tech"> | {{ proj.tech_stack }}</span>{% endif %}
+        {% if proj.bullets %}
+        <ul>{% for b in proj.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
         {% endif %}
-        {% if proj.link %}<span class="project-tech"> | {{ proj.link }}</span>{% endif %}
-        {% if proj.description %}<p style="font-size:9.5pt; color:#444">{{ proj.description }}</p>{% endif %}
     </div>
     {% endfor %}
 </div>
@@ -254,9 +161,20 @@
     <div class="section-title">Certifications</div>
     <ul>
         {% for cert in certifications %}
-        <li>{{ cert }}</li>
+        <li>
+            <strong>{{ cert.name | default('') }}</strong>
+            {% if cert.issuer %} — {{ cert.issuer }}{% endif %}
+            {% if cert.date %} ({{ cert.date }}){% endif %}
+        </li>
         {% endfor %}
     </ul>
+</div>
+{% endif %}
+
+{% if achievements %}
+<div class="section">
+    <div class="section-title">Achievements</div>
+    <ul>{% for a in achievements %}<li>{{ a }}</li>{% endfor %}</ul>
 </div>
 {% endif %}
 

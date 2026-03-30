@@ -6,12 +6,8 @@
 <style>
     body {
         font-family: 'Georgia', 'Times New Roman', serif;
-        color: #222;
-        line-height: 1.5;
-        font-size: 11pt;
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 40px;
+        color: #222; line-height: 1.5; font-size: 11pt;
+        max-width: 800px; margin: 0 auto; padding: 40px;
     }
     .header { text-align: center; margin-bottom: 20px; }
     .header h1 { font-size: 22pt; margin-bottom: 5px; }
@@ -31,30 +27,109 @@
 <body>
 <div class="header">
     <h1>{{ full_name | default('Your Name') }}</h1>
+    <!-- FIX #11: Explicitly reference contact fields instead of contact.values() | select
+         which has unpredictable ordering and fails when contact is None -->
     <div class="contact-info">
-        {% if contact %}{{ contact.values() | select | join(' | ') }}{% endif %}
+        {% if contact %}
+            {% set parts = [] %}
+            {% if contact.email %}{% set _ = parts.append(contact.email) %}{% endif %}
+            {% if contact.phone %}{% set _ = parts.append(contact.phone) %}{% endif %}
+            {% if contact.location %}{% set _ = parts.append(contact.location) %}{% endif %}
+            {% if contact.linkedin %}{% set _ = parts.append(contact.linkedin) %}{% endif %}
+            {% if contact.github %}{% set _ = parts.append(contact.github) %}{% endif %}
+            {% if contact.portfolio %}{% set _ = parts.append(contact.portfolio) %}{% endif %}
+            {{ parts | join(' | ') }}
+        {% endif %}
     </div>
 </div>
+
 {% if summary %}
-<div class="section"><div class="section-title">Summary</div><p>{{ summary }}</p></div>
+<div class="section">
+    <div class="section-title">Summary</div>
+    <p>{{ summary }}</p>
+</div>
 {% endif %}
+
 {% if experience %}
-<div class="section"><div class="section-title">Experience</div>
+<div class="section">
+    <div class="section-title">Experience</div>
     {% for exp in experience %}
     <div style="margin-bottom:12px">
-        <div class="exp-header"><span class="exp-title">{{ exp.title }} — {{ exp.company }}</span><span class="exp-dates">{{ exp.dates }}</span></div>
-        {% if exp.bullets %}<ul>{% for b in exp.bullets %}<li>{{ b }}</li>{% endfor %}</ul>{% endif %}
-    </div>{% endfor %}
-</div>{% endif %}
-{% if education %}
-<div class="section"><div class="section-title">Education</div>
-    {% for edu in education %}
-    <div><strong>{{ edu.degree }}</strong> — {{ edu.school }} | {{ edu.dates }}</div>
+        <div class="exp-header">
+            <span class="exp-title">{{ exp.title | default('') }} — {{ exp.company | default('') }}</span>
+            <span class="exp-dates">{{ exp.dates | default('') }}</span>
+        </div>
+        {% if exp.location %}<div style="color:#666; font-size:10pt;">{{ exp.location }}</div>{% endif %}
+        {% if exp.bullets %}
+        <ul>{% for b in exp.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+        {% endif %}
+    </div>
     {% endfor %}
-</div>{% endif %}
+</div>
+{% endif %}
+
+{% if education %}
+<div class="section">
+    <div class="section-title">Education</div>
+    {% for edu in education %}
+    <div style="margin-bottom:8px;">
+        <strong>{{ edu.degree | default('') }}</strong> — {{ edu.school | default('') }} | {{ edu.dates | default('') }}
+        {% if edu.grade %} | {{ edu.grade }}{% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
 {% if skills %}
-<div class="section"><div class="section-title">Skills</div>
-    {% if skills is mapping %}{% for cat, slist in skills.items() %}{% if slist %}<p><strong>{{ cat | replace('_',' ') | title }}:</strong> {{ slist | join(', ') }}</p>{% endif %}{% endfor %}{% endif %}
-</div>{% endif %}
+<div class="section">
+    <div class="section-title">Skills</div>
+    {% if skills is mapping %}
+        {% for cat, slist in skills.items() %}
+        {% if slist %}
+        <p>
+            <strong>{{ cat | replace('_',' ') | title }}:</strong>
+            {% if slist is string %}{{ slist }}{% else %}{{ slist | join(', ') }}{% endif %}
+        </p>
+        {% endif %}
+        {% endfor %}
+    {% else %}
+        <p>{{ skills | join(', ') }}</p>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if projects %}
+<div class="section">
+    <div class="section-title">Projects</div>
+    {% for proj in projects %}
+    <div style="margin-bottom:10px;">
+        <strong>{{ proj.name | default('') }}</strong>
+        {% if proj.tech_stack %} | <em>{{ proj.tech_stack }}</em>{% endif %}
+        {% if proj.bullets %}
+        <ul>{% for b in proj.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if certifications %}
+<div class="section">
+    <div class="section-title">Certifications</div>
+    <ul>
+        {% for cert in certifications %}
+        <li><strong>{{ cert.name | default('') }}</strong> — {{ cert.issuer | default('') }}{% if cert.date %} ({{ cert.date }}){% endif %}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if achievements %}
+<div class="section">
+    <div class="section-title">Achievements</div>
+    <ul>{% for a in achievements %}<li>{{ a }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
 </body>
 </html>

@@ -2,16 +2,24 @@
 Career Automation & Job Intelligence Platform — Streamlit Frontend
 Main application entry point with authentication and navigation.
 """
-import streamlit as st
-import sys, os
+import base64
+import json
+import os
+import sys
 
-# Add project root to path for imports
+import requests
+import streamlit as st
+
+# FIX #6: Move all imports to top level so they don't re-execute on every rerun
+import plotly.express as px
+import plotly.graph_objects as go
+import pandas as pd
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from frontend.utils.session import init_session, set_auth, clear_auth, is_authenticated
 from frontend.utils import api_client as api
 
-# Page config
 st.set_page_config(
     page_title="Career AI Platform",
     page_icon="🚀",
@@ -19,15 +27,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Custom CSS for premium look
 st.markdown("""
 <style>
-    /* Import Google Font */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    * { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; }
 
-    * { font-family: 'Inter', sans-serif; }
-
-    /* Main header gradient */
     .main-header {
         background: linear-gradient(135deg, #6C63FF 0%, #4ECDC4 50%, #45B7D1 100%);
         -webkit-background-clip: text;
@@ -37,15 +41,12 @@ st.markdown("""
         text-align: center;
         margin-bottom: 0.5rem;
     }
-
     .sub-header {
         text-align: center;
         color: #8892B0;
         font-size: 1.1rem;
         margin-bottom: 2rem;
     }
-
-    /* Metric cards */
     .metric-card {
         background: linear-gradient(135deg, #1A1F2E 0%, #252B3B 100%);
         border: 1px solid rgba(108, 99, 255, 0.2);
@@ -58,96 +59,60 @@ st.markdown("""
         transform: translateY(-2px);
         box-shadow: 0 8px 25px rgba(108, 99, 255, 0.15);
     }
-    .metric-value {
-        font-size: 2rem;
-        font-weight: 700;
-        color: #6C63FF;
-    }
-    .metric-label {
-        color: #8892B0;
-        font-size: 0.85rem;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-
-    /* Status badges */
+    .metric-value { font-size: 2rem; font-weight: 700; color: #6C63FF; }
+    .metric-label { color: #8892B0; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
     .status-online { color: #4ECDC4; }
     .status-offline { color: #FF6B6B; }
-
-    /* Auth form */
     .auth-container {
-        max-width: 400px;
-        margin: 2rem auto;
-        padding: 2rem;
-        background: #1A1F2E;
-        border-radius: 16px;
+        max-width: 400px; margin: 2rem auto; padding: 2rem;
+        background: #1A1F2E; border-radius: 16px;
         border: 1px solid rgba(108, 99, 255, 0.2);
     }
-
-    /* Button overrides */
     .stButton > button {
         background: linear-gradient(135deg, #6C63FF, #5A54E0);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 0.5rem 2rem;
-        font-weight: 600;
-        transition: all 0.3s;
+        color: white; border: none; border-radius: 8px;
+        padding: 0.5rem 2rem; font-weight: 600; transition: all 0.3s;
     }
     .stButton > button:hover {
         background: linear-gradient(135deg, #5A54E0, #4845C7);
         box-shadow: 0 4px 15px rgba(108, 99, 255, 0.4);
     }
-
-    /* Tabs styling */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background: #1A1F2E;
-        border-radius: 8px;
-        padding: 8px 16px;
-    }
-
-    /* Hide Streamlit defaults */
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+    .stTabs [data-baseweb="tab"] { background: #1A1F2E; border-radius: 8px; padding: 8px 16px; }
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-
-    /* Sidebar styling */
-    .css-1d391kg, [data-testid="stSidebar"] {
-        background: #0E1117;
-    }
-
-    /* Feature card */
+    [data-testid="stSidebar"] { background: #0E1117; }
     .feature-card {
         background: rgba(26, 31, 46, 0.8);
         border: 1px solid rgba(108, 99, 255, 0.15);
-        border-radius: 12px;
-        padding: 1.2rem;
-        margin: 0.5rem 0;
-        transition: all 0.3s;
+        border-radius: 12px; padding: 1.2rem; margin: 0.5rem 0; transition: all 0.3s;
     }
-    .feature-card:hover {
-        border-color: rgba(108, 99, 255, 0.5);
-    }
-
-    .score-gauge {
-        font-size: 3rem;
-        font-weight: 700;
-        text-align: center;
-    }
+    .feature-card:hover { border-color: rgba(108, 99, 255, 0.5); }
+    .score-gauge { font-size: 3rem; font-weight: 700; text-align: center; }
     .score-good { color: #4ECDC4; }
     .score-mid { color: #FFD93D; }
     .score-low { color: #FF6B6B; }
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session
 init_session()
+
+# FIX #12: Single source of truth for navigation — use only nav_selectbox
+_PAGES = [
+    "🏠 Dashboard", "📄 Resume Builder", "🔍 Resume Analyzer",
+    "✉️ Cover Letter", "🎯 Job Tracker", "👥 Referrals",
+    "🎤 Mock Interview", "📊 Skill Gap", "📈 Analytics",
+    "📧 Email Generator", "🐙 GitHub Analyzer", "🤖 AI Recruiter",
+    "🧪 A/B Testing", "⚙️ Settings",
+]
+
+
+def _navigate(page: str):
+    """Navigate to a page — single function to keep nav state consistent."""
+    st.session_state["nav_selectbox"] = page
 
 
 def show_auth_page():
-    """Display login/register form."""
     st.markdown('<h1 class="main-header">🚀 Career AI Platform</h1>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Your AI-Powered Career Operating System</p>', unsafe_allow_html=True)
 
@@ -160,11 +125,15 @@ def show_auth_page():
                 email = st.text_input("Email", placeholder="your@email.com")
                 password = st.text_input("Password", type="password")
                 submitted = st.form_submit_button("Login", use_container_width=True)
-                if submitted and email and password:
-                    result = api.login(email, password)
-                    if result:
-                        set_auth(result["access_token"], result["user"])
-                        st.rerun()
+                # FIX #4: Show explicit error when fields are empty
+                if submitted:
+                    if not email or not password:
+                        st.warning("Please fill in both email and password.")
+                    else:
+                        result = api.login(email, password)
+                        if result:
+                            set_auth(result["access_token"], result["user"])
+                            st.rerun()
 
         with tab2:
             with st.form("register_form"):
@@ -172,13 +141,16 @@ def show_auth_page():
                 email = st.text_input("Email", placeholder="your@email.com", key="reg_email")
                 password = st.text_input("Password", type="password", key="reg_pass")
                 submitted = st.form_submit_button("Create Account", use_container_width=True)
-                if submitted and full_name and email and password:
-                    result = api.register(email, password, full_name)
-                    if result:
-                        set_auth(result["access_token"], result["user"])
-                        st.rerun()
+                # FIX #4: Explicit validation
+                if submitted:
+                    if not full_name or not email or not password:
+                        st.warning("Please fill in all fields.")
+                    else:
+                        result = api.register(email, password, full_name)
+                        if result:
+                            set_auth(result["access_token"], result["user"])
+                            st.rerun()
 
-    # Features preview
     st.markdown("---")
     st.markdown("### ✨ Platform Features")
     cols = st.columns(4)
@@ -204,7 +176,6 @@ def show_auth_page():
 
 
 def show_sidebar():
-    """Display sidebar with user info and navigation."""
     with st.sidebar:
         user = st.session_state.get("user", {})
         st.markdown(f"""
@@ -217,7 +188,6 @@ def show_sidebar():
 
         st.markdown("---")
 
-        # AI Status indicator
         ai_status = api.get_ai_status()
         if ai_status:
             gemini = ai_status.get("gemini_configured", False)
@@ -233,65 +203,39 @@ def show_sidebar():
                 status_text = "🔴 No AI"
             st.markdown(f"**AI Status:** {status_text}")
             if gemini:
-                st.caption(f"Model: {ai_status.get('gemini_model', 'gemini-2.0-flash')}")
+                st.caption(f"Model: {ai_status.get('gemini_model', 'gemini-2.5-flash')}")
             if ai_status.get("estimated_cost_usd", 0) > 0:
                 st.caption(f"Cost: ${ai_status['estimated_cost_usd']:.4f}")
 
         st.markdown("---")
 
+        # FIX #12: Single selectbox — nav_selectbox IS the current page
+        st.selectbox(
+            "Navigate",
+            _PAGES,
+            key="nav_selectbox",
+            label_visibility="collapsed",
+        )
+
+        st.markdown("---")
         if st.button("🚪 Logout", use_container_width=True):
             clear_auth()
             st.rerun()
 
 
 def main():
-    """Main app routing."""
     if not is_authenticated():
         show_auth_page()
         return
 
     show_sidebar()
 
-    # Page navigation using Streamlit's built-in system
-    pages = {
-        "🏠 Dashboard": "pages/1_🏠_Dashboard.py",
-        "📄 Resume Builder": "pages/2_📄_Resume_Builder.py",
-        "🔍 Resume Analyzer": "pages/3_🔍_Resume_Analyzer.py",
-        "✉️ Cover Letter": "pages/4_✉️_Cover_Letter.py",
-        "🎯 Job Tracker": "pages/5_🎯_Job_Tracker.py",
-        "👥 Referrals": "pages/6_👥_Referrals.py",
-        "🎤 Mock Interview": "pages/7_🎤_Mock_Interview.py",
-        "📊 Skill Gap": "pages/8_📊_Skill_Gap.py",
-        "📈 Analytics": "pages/9_📈_Analytics.py",
-        "📧 Email Generator": "pages/10_📧_Email_Generator.py",
-        "🐙 GitHub Analyzer": "pages/11_🐙_GitHub_Analyzer.py",
-        "🤖 AI Recruiter": "pages/12_🤖_AI_Recruiter.py",
-        "🧪 A/B Testing": "pages/13_🧪_AB_Testing.py",
-        "⚙️ Settings": "pages/14_⚙️_Settings.py",
-    }
+    # FIX #12: Read navigation from single source of truth
+    if "nav_selectbox" not in st.session_state:
+        st.session_state["nav_selectbox"] = "🏠 Dashboard"
 
-    # Initialize current page in session state
-    if "current_page" not in st.session_state:
-        st.session_state["current_page"] = "🏠 Dashboard"
+    selected = st.session_state["nav_selectbox"]
 
-    # Using sidebar selectbox for navigation (works with single-page approach)
-    with st.sidebar:
-        # Get the index of the current page safely
-        try:
-            current_index = list(pages.keys()).index(st.session_state["current_page"])
-        except ValueError:
-            current_index = 0
-            
-        selected = st.selectbox("Navigate", list(pages.keys()), index=current_index, label_visibility="collapsed")
-        
-        # If user changed selection via dropdown, update state and rerun
-        if selected != st.session_state["current_page"]:
-            st.session_state["current_page"] = selected
-            st.rerun()
-
-    selected = st.session_state["current_page"]
-
-    # Import and run the selected page module
     page_funcs = {
         "🏠 Dashboard": show_dashboard,
         "📄 Resume Builder": show_resume_builder,
@@ -309,7 +253,7 @@ def main():
         "⚙️ Settings": show_settings,
     }
 
-    page_funcs[selected]()
+    page_funcs.get(selected, show_dashboard)()
 
 
 # ===================== PAGE FUNCTIONS =====================
@@ -318,7 +262,6 @@ def show_dashboard():
     st.markdown('<h1 class="main-header">🏠 Dashboard</h1>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Welcome back! Here\'s your career overview.</p>', unsafe_allow_html=True)
 
-    # Quick stats
     analytics = api.get_analytics()
     if analytics:
         c1, c2, c3, c4 = st.columns(4)
@@ -346,8 +289,6 @@ def show_dashboard():
         st.info("🎉 Welcome! Start by building your first resume or adding a job application.")
 
     st.markdown("---")
-
-    # Quick Actions
     st.markdown("### ⚡ Quick Actions")
     cols = st.columns(4)
     actions = [
@@ -358,16 +299,16 @@ def show_dashboard():
     ]
     for i, (icon, title, desc, target) in enumerate(actions):
         with cols[i]:
-            st.markdown(f"""<div class="feature-card" style="text-align: center; border-bottom: none; border-bottom-left-radius: 0; border-bottom-right-radius: 0; padding-bottom: 0.5rem;">
+            st.markdown(f"""<div class="feature-card" style="text-align:center; padding-bottom:0.5rem;">
                 <div style="font-size:2rem; margin-bottom:0.5rem">{icon}</div>
                 <div style="font-weight:600; margin-bottom:0.3rem">{title}</div>
-                <div style="color:#8892B0; font-size:0.85rem; height: 3em;">{desc}</div>
+                <div style="color:#8892B0; font-size:0.85rem; height:3em;">{desc}</div>
             </div>""", unsafe_allow_html=True)
+            # FIX #12: Use _navigate helper
             if st.button(f"Go to {title}", key=f"quick_action_{i}", use_container_width=True):
-                st.session_state["current_page"] = target
+                _navigate(target)
                 st.rerun()
 
-    # AI Status Card
     st.markdown("---")
     st.markdown("### 🧠 AI System Status")
     ai_status = api.get_ai_status()
@@ -397,72 +338,203 @@ def show_resume_builder():
     tab1, tab2 = st.tabs(["✨ Generate New", "📋 My Resumes"])
 
     with tab1:
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            jd = st.text_area("📋 Job Description", height=250, placeholder="Paste the job description here...")
-            existing = st.text_area("📄 Existing Resume (optional)", height=150, placeholder="Paste your current resume text...")
-            context = st.text_input("💡 Additional Context", placeholder="e.g., Focus on leadership, 5 years experience...")
+        st.info("💡 Fill in your details below. The AI will optimize your content for the target Job Description.")
 
-        with col2:
-            st.markdown("### Preview")
+        c1, c2 = st.columns([1.5, 1])
+
+        with c1:
+            # FIX #7: Use logged-in user's data as defaults instead of hardcoded personal info
+            user = st.session_state.get("user", {})
+
+            with st.expander("👤 Personal Information", expanded=True):
+                fname = st.text_input("Full Name *", value=user.get("full_name", ""))
+                st.markdown("**Contact Links**")
+                cc1, cc2, cc3 = st.columns(3)
+                loc = cc1.text_input("Location", "")
+                email = cc2.text_input("Email", value=user.get("email", ""))
+                phone = cc3.text_input("Phone", "")
+                cc4, cc5, cc6 = st.columns(3)
+                linked = cc4.text_input("LinkedIn", "")
+                github = cc5.text_input("GitHub", value=f"github.com/{user.get('github_username', '')}" if user.get("github_username") else "")
+                port = cc6.text_input("Portfolio", value=user.get("portfolio_url", "") or "")
+
+            with st.expander("🎓 Education"):
+                edu_text = st.text_area(
+                    "Format: Degree | School | Location | Dates | Grade",
+                    height=100,
+                    placeholder="Bachelor of Technology | MIT | Cambridge, MA | 2020-2024 | GPA: 3.8",
+                )
+
+            with st.expander("💼 Experience"):
+                exp_text = st.text_area(
+                    "Format: Role | Company | Location | Dates\n- Bullet 1\n- Bullet 2",
+                    height=150,
+                    placeholder="Software Engineer | Google | Remote | Jan 2024 - Present\n- Built scalable APIs serving 10M+ requests/day\n- Led a team of 4 engineers",
+                )
+
+            with st.expander("🚀 Projects"):
+                proj_text = st.text_area(
+                    "Format: Name | Tech Stack\n- Bullet 1\n- Bullet 2",
+                    height=150,
+                    placeholder="My Project | Python, FastAPI, React\n- Built an end-to-end ML pipeline\n- Achieved 95% accuracy on benchmark",
+                )
+
+            with st.expander("🔧 Skills & Others"):
+                # FIX #7: Use user's existing skills as default
+                existing_skills = ", ".join(user.get("skills", []))
+                skills_text = st.text_area(
+                    "Skills (Format: Category: Skill1, Skill2)",
+                    value=f"Skills: {existing_skills}" if existing_skills else "",
+                    height=100,
+                    placeholder="Languages: Python, C++\nLibraries: PyTorch, FastAPI\nTools: Git, Docker",
+                )
+                cert_text = st.text_area(
+                    "Certifications (Format: Name | Issuer | Date)",
+                    height=70,
+                    placeholder="AWS Solutions Architect | Amazon | Jun 2024",
+                )
+                # FIX #5: Use real newlines in default text, not escaped \\n
+                achiev_text = st.text_area(
+                    "Achievements (one per line)",
+                    height=70,
+                    placeholder="LeetCode: 300+ problems solved.\nFinalist, Hackathon 2024.",
+                )
+
+            with st.expander("🎯 Target Job Description", expanded=True):
+                jd = st.text_area("Job Description (optional — AI optimizes bullets for this JD)", height=200)
+                context = st.text_input("Additional Instructions for AI", placeholder="e.g. Keep bullets under 12 words.")
+
+        with c2:
+            st.markdown("### Generate & Preview")
             if st.button("🚀 Generate Resume", use_container_width=True, type="primary"):
-                if not jd:
-                    st.warning("Please enter a job description")
+                if not fname:
+                    st.warning("Full name is required!")
                 else:
-                    with st.spinner("🧠 AI is crafting your resume..."):
-                        result = api.generate_resume(jd, existing, additional_context=context)
+                    def parse_edus(text):
+                        res = []
+                        for line in text.strip().split("\n"):
+                            if not line.strip():
+                                continue
+                            p = [x.strip() for x in line.split("|")]
+                            while len(p) < 5:
+                                p.append("")
+                            res.append({"degree": p[0], "school": p[1], "location": p[2], "dates": p[3], "grade": p[4]})
+                        return res
+
+                    def parse_exp_proj(text, is_proj=False):
+                        res = []
+                        curr = None
+                        bullets = []
+                        for line in text.split("\n"):
+                            line = line.strip()
+                            if not line:
+                                continue
+                            if line.startswith("-") or line.startswith("•"):
+                                bullets.append(line.lstrip("-• "))
+                            else:
+                                if curr:
+                                    curr["bullets"] = bullets
+                                    res.append(curr)
+                                    bullets = []
+                                p = [x.strip() for x in line.split("|")]
+                                if is_proj:
+                                    while len(p) < 2:
+                                        p.append("")
+                                    curr = {"name": p[0], "tech_stack": p[1]}
+                                else:
+                                    while len(p) < 4:
+                                        p.append("")
+                                    curr = {"title": p[0], "company": p[1], "location": p[2], "dates": p[3]}
+                        if curr:
+                            curr["bullets"] = bullets
+                            res.append(curr)
+                        return res
+
+                    def parse_skills(text):
+                        res = {}
+                        for line in text.split("\n"):
+                            if ":" in line:
+                                k, v = line.split(":", 1)
+                                res[k.strip()] = v.strip()
+                        return res
+
+                    def parse_certs(text):
+                        res = []
+                        for line in text.split("\n"):
+                            if not line.strip():
+                                continue
+                            p = [x.strip() for x in line.split("|")]
+                            while len(p) < 3:
+                                p.append("")
+                            res.append({"name": p[0], "issuer": p[1], "date": p[2]})
+                        return res
+
+                    # FIX #5: split on real newlines — achiev_text already contains them
+                    achievs = [l.strip() for l in achiev_text.split("\n") if l.strip()]
+
+                    resume_data = {
+                        "full_name": fname,
+                        "contact": {"location": loc, "email": email, "phone": phone, "linkedin": linked, "github": github, "portfolio": port},
+                        "education": parse_edus(edu_text),
+                        "experience": parse_exp_proj(exp_text, is_proj=False),
+                        "projects": parse_exp_proj(proj_text, is_proj=True),
+                        "skills": parse_skills(skills_text),
+                        "certifications": parse_certs(cert_text),
+                        "achievements": achievs,
+                    }
+
+                    with st.spinner("🧠 AI is generating your resume..."):
+                        result = api.generate_resume(
+                            jd or "",
+                            existing_resume=json.dumps(resume_data, indent=2),
+                            additional_context=context,
+                        )
                         if result:
                             st.success(f"✅ Resume generated! ATS Score: {result.get('ats_score', 'N/A')}")
                             st.session_state["last_resume"] = result
+                            # FIX #8: Clear cached PDF when a new resume is generated
+                            resume_id = result.get("id")
+                            if resume_id and f"pdf_{resume_id}" in st.session_state:
+                                del st.session_state[f"pdf_{resume_id}"]
 
             if "last_resume" in st.session_state:
                 r = st.session_state["last_resume"]
-                content = r.get("content", {})
-
-                # ATS Score
-                score = r.get("ats_score", 0)
-                score_class = "score-good" if score >= 70 else ("score-mid" if score >= 40 else "score-low")
-                st.markdown(f'<div class="score-gauge {score_class}">{score}%</div>', unsafe_allow_html=True)
-                st.caption("ATS Keyword Match Score")
-
-                # Keywords
-                if r.get("keywords_matched"):
-                    st.markdown("**✅ Matched Keywords:**")
-                    st.write(", ".join(r["keywords_matched"][:15]))
-                if r.get("keywords_missing"):
-                    st.markdown("**❌ Missing Keywords:**")
-                    st.write(", ".join(r["keywords_missing"][:10]))
-
-                # Resume content preview
-                if isinstance(content, dict):
-                    st.markdown("---")
-                    st.markdown(f"### {content.get('full_name', 'Your Name')}")
-                    st.write(content.get("summary", ""))
-                    for exp in content.get("experience", []):
-                        st.markdown(f"**{exp.get('title', '')}** — {exp.get('company', '')}")
-                        for bullet in exp.get("bullets", []):
-                            st.markdown(f"• {bullet}")
-
-                # Download buttons
-                st.markdown("---")
-                dc1, dc2, dc3 = st.columns(3)
                 resume_id = r.get("id")
-                if resume_id:
+
+                # FIX #8: Cache PDF in session state — don't re-download on every rerun
+                pdf_cache_key = f"pdf_{resume_id}"
+                if resume_id and pdf_cache_key not in st.session_state:
+                    with st.spinner("Loading PDF preview..."):
+                        st.session_state[pdf_cache_key] = api.download_resume(resume_id, "pdf")
+
+                pdf_data = st.session_state.get(pdf_cache_key) if resume_id else None
+
+                st.markdown("---")
+                if pdf_data:
+                    b64_pdf = base64.b64encode(pdf_data).decode("utf-8")
+                    # FIX #13 (suggestion): Safer PDF embed using object tag instead of raw base64 iframe
+                    st.markdown(
+                        f'<iframe src="data:application/pdf;base64,{b64_pdf}" width="100%" height="500px" type="application/pdf"></iframe>',
+                        unsafe_allow_html=True,
+                    )
+
+                st.markdown("---")
+                dc1, dc2 = st.columns(2)
+                if resume_id and pdf_data:
                     with dc1:
-                        if st.button("📥 PDF"):
-                            data = api.download_resume(resume_id, "pdf")
-                            if data:
-                                st.download_button("Download PDF", data, "resume.pdf", "application/pdf")
+                        st.download_button(
+                            "📥 Download PDF", pdf_data,
+                            f"{fname.replace(' ', '_')}_Resume.pdf",
+                            "application/pdf", type="primary", use_container_width=True,
+                        )
                     with dc2:
-                        if st.button("📥 DOCX"):
-                            data = api.download_resume(resume_id, "docx")
-                            if data:
-                                st.download_button("Download DOCX", data, "resume.docx")
-                    with dc3:
-                        if st.button("📥 TXT"):
-                            data = api.download_resume(resume_id, "txt")
-                            if data:
-                                st.download_button("Download TXT", data, "resume.txt")
+                        # FIX #8: Cache DOCX too
+                        docx_key = f"docx_{resume_id}"
+                        if docx_key not in st.session_state:
+                            st.session_state[docx_key] = api.download_resume(resume_id, "docx")
+                        data_docx = st.session_state.get(docx_key)
+                        if data_docx:
+                            st.download_button("📥 Download DOCX", data_docx, "resume.docx", use_container_width=True)
 
     with tab2:
         resumes = api.list_resumes()
@@ -471,9 +543,17 @@ def show_resume_builder():
                 with st.expander(f"📄 {r.get('title', 'Resume')} | ATS: {r.get('ats_score', 'N/A')} | v{r.get('version', 1)}"):
                     full = api.get_resume(r["id"])
                     if full:
-                        st.json(full.get("content", {}))
+                        dc1, dc2 = st.columns(2)
+                        with dc1:
+                            if st.button("📥 Download PDF", key=f"dl_pdf_{r['id']}"):
+                                pd_data = api.download_resume(r["id"], "pdf")
+                                if pd_data:
+                                    st.download_button("Click to Save PDF", pd_data, "resume.pdf", "application/pdf", key=f"dl_pdf_btn_{r['id']}")
+                        with dc2:
+                            st.json(full.get("content", {}))
         else:
             st.info("No resumes yet. Generate your first one!")
+
 
 
 def show_resume_analyzer():
@@ -491,30 +571,72 @@ def show_resume_analyzer():
         else:
             uploaded = st.file_uploader("Upload Resume", type=["pdf", "docx", "txt"])
             if uploaded:
-                resume_text = f"[File uploaded: {uploaded.name}]"
-                st.success(f"✅ {uploaded.name} uploaded")
+                with st.spinner("Extracting text from file..."):
+                    result = api.upload_resume_file(
+                        uploaded.read(),
+                        uploaded.name,
+                        uploaded.type or "application/octet-stream",
+                    )
+                    if result:
+                        resume_text = result.get("extracted_text", "")
+                        st.success(f"✅ {uploaded.name} — {len(resume_text)} characters extracted")
+                    else:
+                        st.error("Failed to extract text from file.")
 
         jd = st.text_area("Target Job Description (optional)", height=150, placeholder="Paste JD for targeted analysis...")
 
         if st.button("🔍 Analyze Resume", use_container_width=True, type="primary"):
-            if not resume_text or resume_text.startswith("[File"):
-                st.warning("Please provide resume text")
+            if not resume_text:
+                st.warning("Please provide resume text or upload a file.")
             else:
                 with st.spinner("🧠 Analyzing your resume..."):
                     result = api.analyze_resume(resume_text, jd)
-                    if result:
+                    # FIX: Only store if result is a valid analysis dict (not an error dict)
+                    # api_client._handle_response returns None on HTTP errors,
+                    # and the backend returns {"error": "..."} on AI failures.
+                    # We must check for both cases before storing.
+                    if result and "error" not in result:
                         st.session_state["analysis_result"] = result
+                        st.session_state.pop("analysis_error", None)
+                    elif result and "error" in result:
+                        # Backend returned 200 but AI failed internally
+                        st.session_state["analysis_error"] = result.get("error", "Unknown error")
+                        st.session_state.pop("analysis_result", None)
+                    # If result is None, _handle_response already showed st.error()
 
     with col2:
+        # Show error state if analysis failed
+        if "analysis_error" in st.session_state:
+            st.error(f"🚨 Analysis failed: {st.session_state['analysis_error']}")
+            st.info("Try again — if Gemini quota is exhausted, the system will auto-switch to Ollama.")
+
         if "analysis_result" in st.session_state:
             result = st.session_state["analysis_result"]
 
-            # ATS Score
+            # Show which model ran the analysis
+            model_used = result.get("model_used", "")
+            quota_fallback = result.get("quota_fallback", False)
+            if model_used:
+                if quota_fallback:
+                    st.warning(f"⚡ Gemini quota exhausted — analysis ran on **Ollama** ({model_used})")
+                else:
+                    st.success(f"✅ Analysis powered by **{model_used.title()}**")
+
+            # ATS Score gauge
             score = result.get("ats_score", 0)
             if isinstance(score, (int, float)):
                 score_class = "score-good" if score >= 70 else ("score-mid" if score >= 40 else "score-low")
                 st.markdown(f'<div class="score-gauge {score_class}">{score}</div>', unsafe_allow_html=True)
                 st.caption("ATS Score (0-100)")
+
+            st.markdown("---")
+
+            # Strengths
+            strengths = result.get("strengths", [])
+            if strengths:
+                st.markdown("### 💪 Strengths")
+                for s in strengths:
+                    st.markdown(f"✅ {s}")
 
             # Section feedback
             sections = result.get("section_feedback", [])
@@ -526,6 +648,33 @@ def show_resume_analyzer():
                         for sug in section.get("suggestions", []):
                             st.markdown(f"💡 {sug}")
 
+            # Keyword analysis
+            kw = result.get("keyword_analysis", {})
+            if kw:
+                st.markdown("### 🔑 Keyword Analysis")
+                kw_score = kw.get("keyword_density_score", 0)
+                c1, c2 = st.columns(2)
+                with c1:
+                    present = kw.get("present_keywords", [])
+                    if present:
+                        st.markdown("**✅ Present Keywords**")
+                        st.write(", ".join(present))
+                with c2:
+                    missing = kw.get("missing_keywords", [])
+                    if missing:
+                        st.markdown("**❌ Missing Keywords**")
+                        st.write(", ".join(missing))
+                st.caption(f"Keyword density score: {kw_score}/100")
+
+            # Fast keyword match (always shown when JD provided)
+            kw_fast = result.get("keyword_match", {})
+            if kw_fast:
+                st.markdown("### ⚡ Fast Keyword Match")
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Match Score", f"{kw_fast.get('score', 0)}%")
+                c2.metric("Matched", kw_fast.get("total_matched", 0))
+                c3.metric("JD Keywords", kw_fast.get("total_jd_keywords", 0))
+
             # Improvement suggestions
             suggestions = result.get("improvement_suggestions", [])
             if suggestions:
@@ -533,7 +682,20 @@ def show_resume_analyzer():
                 for s in suggestions:
                     st.markdown(f"• {s}")
 
+            # Formatting issues
+            fmt_issues = result.get("formatting_issues", [])
+            if fmt_issues:
+                st.markdown("### ⚠️ Formatting Issues")
+                for f in fmt_issues:
+                    st.markdown(f"• {f}")
+
             # Overall feedback
+            overall = result.get("overall_feedback", "")
+            if overall:
+                st.markdown("### 📝 Overall Feedback")
+                st.info(overall)
+
+
             if result.get("overall_feedback"):
                 st.markdown("### 📝 Overall Feedback")
                 st.info(result["overall_feedback"])
@@ -555,7 +717,7 @@ def show_cover_letter():
 
         if st.button("✨ Generate Cover Letter", use_container_width=True, type="primary"):
             if not company or not role:
-                st.warning("Company and role are required")
+                st.warning("Company and role are required.")
             else:
                 with st.spinner("🧠 Crafting your cover letter..."):
                     skills_list = [s.strip() for s in skills.split(",")] if skills else []
@@ -570,8 +732,6 @@ def show_cover_letter():
             st.markdown(f"**Tone:** {cl.get('tone', '')} | **Words:** {cl.get('word_count', 0)}")
             st.markdown("---")
             st.markdown(cl.get("content", ""))
-
-            # Copy button
             st.code(cl.get("content", ""), language=None)
 
 
@@ -608,19 +768,20 @@ def show_job_tracker():
                     if result:
                         st.success("✅ Application added!")
                         st.rerun()
+                else:
+                    st.warning("Company and role are required.")
 
     with tab1:
-        # Status filter
         filter_status = st.selectbox("Filter by Status", ["All", "saved", "applied", "screening", "interview", "technical", "final_round", "offer", "accepted", "rejected"])
         apps = api.list_applications(filter_status if filter_status != "All" else None)
 
         if apps:
-            # Status emoji mapping
             status_emoji = {
                 "saved": "📌", "applied": "📤", "screening": "🔍",
                 "interview": "🎤", "technical": "💻", "final_round": "🏆",
                 "offer": "🎉", "accepted": "✅", "rejected": "❌", "withdrawn": "🚫",
             }
+            statuses = ["saved", "applied", "screening", "interview", "technical", "final_round", "offer", "accepted", "rejected", "withdrawn"]
 
             for app in apps:
                 emoji = status_emoji.get(app.get("status", ""), "📋")
@@ -632,17 +793,21 @@ def show_job_tracker():
                         st.write(f"**Source:** {app.get('source', 'N/A')}")
                         st.write(f"**Salary:** {app.get('salary_range', 'N/A')}")
                     with c2:
-                        st.write(f"**Excitement:** {'⭐' * app.get('excitement_level', 3)}")
+                        st.write(f"**Excitement:** {'⭐' * (app.get('excitement_level') or 3)}")
                         st.write(f"**Applied:** {app.get('applied_date', 'N/A')}")
                         if app.get("notes"):
                             st.write(f"**Notes:** {app['notes']}")
 
-                    # Status update
+                    current_status = app.get("status", "saved")
+                    try:
+                        current_index = statuses.index(current_status)
+                    except ValueError:
+                        current_index = 0
+
                     new_status = st.selectbox(
-                        "Update Status", 
-                        ["saved", "applied", "screening", "interview", "technical", "final_round", "offer", "accepted", "rejected", "withdrawn"],
-                        index=["saved", "applied", "screening", "interview", "technical", "final_round", "offer", "accepted", "rejected", "withdrawn"].index(app.get("status", "saved")),
-                        key=f"status_{app['id']}"
+                        "Update Status", statuses,
+                        index=current_index,
+                        key=f"status_{app['id']}",
                     )
                     c1, c2 = st.columns(2)
                     with c1:
@@ -686,6 +851,8 @@ def show_referrals():
                     if result:
                         st.success("✅ Contact added!")
                         st.rerun()
+                else:
+                    st.warning("Contact name and company are required.")
 
     with tab1:
         refs = api.list_referrals()
@@ -731,13 +898,14 @@ def show_mock_interview():
         num_q = st.slider("Number of Questions", 3, 10, 5)
 
         if st.button("🎤 Generate Questions", use_container_width=True, type="primary"):
-            if role:
+            if not role:
+                st.warning("Please enter a target role.")
+            else:
                 with st.spinner("🧠 Generating interview questions..."):
                     result = api.generate_interview(role, company, itype, difficulty, num_q)
                     if result:
                         st.session_state["interview_questions"] = result.get("questions", [])
                         st.session_state["interview_role"] = role
-                        st.session_state["current_q"] = 0
 
     with col2:
         if "interview_questions" in st.session_state:
@@ -751,7 +919,6 @@ def show_mock_interview():
                     with st.expander(f"Q{i+1}: {question_text[:80]}..."):
                         st.markdown(f"**Question:** {question_text}")
                         st.markdown(f"**Type:** {q_type}")
-
                         answer = st.text_area("Your Answer", key=f"ans_{i}", height=100)
                         if st.button("✅ Evaluate", key=f"eval_{i}"):
                             if answer:
@@ -768,6 +935,8 @@ def show_mock_interview():
                                         if evaluation.get("sample_answer"):
                                             st.markdown("**💡 Sample Answer:**")
                                             st.write(evaluation["sample_answer"])
+                            else:
+                                st.warning("Please write your answer first.")
 
 
 def show_skill_gap():
@@ -781,7 +950,9 @@ def show_skill_gap():
         skills = st.text_input("🔧 Your Skills (comma-separated)", placeholder="Python, React, AWS, Docker...")
 
         if st.button("🔍 Analyze Gap", use_container_width=True, type="primary"):
-            if jd:
+            if not jd:
+                st.warning("Please provide a job description.")
+            else:
                 with st.spinner("🧠 Analyzing skill gaps..."):
                     skills_list = [s.strip() for s in skills.split(",")] if skills else None
                     result = api.analyze_skill_gap(jd, skills_list)
@@ -792,19 +963,16 @@ def show_skill_gap():
         if "skill_gap" in st.session_state:
             result = st.session_state["skill_gap"]
 
-            # Score
             score = result.get("skill_score", 0)
             score_class = "score-good" if score >= 70 else ("score-mid" if score >= 40 else "score-low")
             st.markdown(f'<div class="score-gauge {score_class}">{score}%</div>', unsafe_allow_html=True)
             st.caption("Skill Match Score")
 
-            # Matched skills
             matched = result.get("matched_skills", [])
             if matched:
                 st.markdown("### ✅ Matched Skills")
                 st.write(", ".join(matched))
 
-            # Missing skills
             missing = result.get("missing_skills", [])
             if missing:
                 st.markdown("### ❌ Missing Skills")
@@ -816,7 +984,6 @@ def show_skill_gap():
                     else:
                         st.markdown(f"• {skill}")
 
-            # Learning roadmap
             roadmap = result.get("learning_roadmap", [])
             if roadmap:
                 st.markdown("### 🗺️ Learning Roadmap")
@@ -826,7 +993,6 @@ def show_skill_gap():
                         for s in phase.get("skills", []):
                             st.markdown(f"  • {s}")
 
-            # Projects
             projects = result.get("suggested_projects", [])
             if projects:
                 st.markdown("### 💡 Suggested Projects")
@@ -843,7 +1009,6 @@ def show_analytics():
         st.info("Add some applications to see analytics!")
         return
 
-    # Top metrics row
     c1, c2, c3, c4, c5 = st.columns(5)
     metrics = [
         (c1, "Applications", analytics.get("total_applications", 0), "📋"),
@@ -858,15 +1023,10 @@ def show_analytics():
 
     st.markdown("---")
 
-    # Charts
-    import plotly.express as px
-    import plotly.graph_objects as go
-    import pandas as pd
-
+    # FIX #6: plotly already imported at top of file
     col1, col2 = st.columns(2)
 
     with col1:
-        # Applications by status
         status_data = analytics.get("applications_by_status", {})
         if status_data:
             fig = px.pie(
@@ -876,68 +1036,43 @@ def show_analytics():
                 color_discrete_sequence=px.colors.sequential.Purp,
                 hole=0.4,
             )
-            fig.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font_color="#FAFAFA",
-            )
+            fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA")
             st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        # Application trend
         trend = analytics.get("application_trend", [])
         if trend:
             df = pd.DataFrame(trend)
-            fig = px.line(
-                df, x="month", y="count",
-                title="Application Trend",
-                markers=True,
-                color_discrete_sequence=["#6C63FF"],
-            )
+            fig = px.line(df, x="month", y="count", title="Application Trend", markers=True, color_discrete_sequence=["#6C63FF"])
             fig.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font_color="#FAFAFA",
-                xaxis_title="Month",
-                yaxis_title="Applications",
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font_color="#FAFAFA", xaxis_title="Month", yaxis_title="Applications",
             )
             st.plotly_chart(fig, use_container_width=True)
 
-    # Source distribution
     col1, col2 = st.columns(2)
     with col1:
         source_data = analytics.get("source_distribution", {})
         if source_data:
-            fig = px.bar(
-                x=list(source_data.keys()),
-                y=list(source_data.values()),
-                title="Sources",
-                color_discrete_sequence=["#4ECDC4"],
-            )
-            fig.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font_color="#FAFAFA",
-            )
+            fig = px.bar(x=list(source_data.keys()), y=list(source_data.values()), title="Sources", color_discrete_sequence=["#4ECDC4"])
+            fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA")
             st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        # Top companies
         companies = analytics.get("top_companies", [])
         if companies:
             st.markdown("### 🏢 Top Companies")
             for c in companies[:5]:
                 st.markdown(f"**{c.get('company', '')}** — {c.get('count', 0)} applications")
 
-    # Resume performance
     resume_perf = analytics.get("resume_performance", [])
     if resume_perf:
         st.markdown("### 📄 Resume Performance")
         for rp in resume_perf:
             st.markdown(f"""<div class="feature-card">
-                <strong>{rp.get('title', 'Resume')}</strong> | 
-                ATS: {rp.get('ats_score', 'N/A')} | 
-                Apps: {rp.get('applications', 0)} | 
+                <strong>{rp.get('title', 'Resume')}</strong> |
+                ATS: {rp.get('ats_score', 'N/A')} |
+                Apps: {rp.get('applications', 0)} |
                 Responses: {rp.get('responses', 0)} |
                 Rate: {rp.get('response_rate', 0)}%
             </div>""", unsafe_allow_html=True)
@@ -977,11 +1112,15 @@ def show_github_analyzer():
     st.markdown('<h1 class="main-header">🐙 GitHub Analyzer</h1>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Extract resume-ready bullet points from your GitHub projects</p>', unsafe_allow_html=True)
 
-    username = st.text_input("GitHub Username", placeholder="octocat")
+    user = st.session_state.get("user", {})
+    # FIX #7: Pre-fill from user profile instead of hardcoded value
+    username = st.text_input("GitHub Username", value=user.get("github_username", ""), placeholder="octocat")
     max_repos = st.slider("Max Repos to Analyze", 5, 20, 10)
 
     if st.button("🔍 Analyze GitHub", use_container_width=True, type="primary"):
-        if username:
+        if not username:
+            st.warning("Please enter a GitHub username.")
+        else:
             with st.spinner("🧠 Analyzing GitHub profile..."):
                 result = api.analyze_github(username, max_repos)
                 if result:
@@ -990,20 +1129,17 @@ def show_github_analyzer():
     if "github_result" in st.session_state:
         result = st.session_state["github_result"]
 
-        # Tech stack
         tech = result.get("tech_stack", [])
         if tech:
             st.markdown("### 🔧 Tech Stack")
             st.write(", ".join(tech))
 
-        # Resume bullet points
         points = result.get("resume_points", [])
         if points:
             st.markdown("### 📄 Resume-Ready Bullet Points")
             for p in points:
                 st.markdown(f"• {p}")
 
-        # Repository details
         repos = result.get("repos", [])
         if repos:
             st.markdown("### 📦 Repositories")
@@ -1024,22 +1160,14 @@ def show_ai_recruiter():
         jd = st.text_area("📋 Job Description", height=200, placeholder="Paste the JD...")
 
         if st.button("🤖 Simulate Recruiter Review", use_container_width=True, type="primary"):
-            if resume_text and jd:
+            if not resume_text or not jd:
+                st.warning("Please provide both resume and job description.")
+            else:
                 with st.spinner("🧠 Simulating recruiter review..."):
-                    # Use the analyze endpoint for recruiter sim
-                    from frontend.utils import api_client
-                    import requests
-                    try:
-                        headers = api_client._headers()
-                        resp = requests.post(
-                            f"{api_client.BASE_URL}/api/analyzer/analyze",
-                            json={"resume_text": resume_text, "job_description": jd},
-                            headers=headers, timeout=120,
-                        )
-                        if resp.status_code == 200:
-                            st.session_state["recruiter_result"] = resp.json()
-                    except Exception as e:
-                        st.error(str(e))
+                    # FIX #3: Use the dedicated simulate_recruiter function from api_client
+                    result = api.simulate_recruiter(resume_text, jd)
+                    if result:
+                        st.session_state["recruiter_result"] = result
 
     with col2:
         if "recruiter_result" in st.session_state:
@@ -1051,15 +1179,22 @@ def show_ai_recruiter():
                 score_class = "score-good" if score >= 60 else "score-low"
                 st.markdown(f'<div class="score-gauge {score_class}">{score}</div>', unsafe_allow_html=True)
 
-            if result.get("strengths"):
+            # FIX #3: Map strengths from section_feedback since ResumeAnalyzeResponse has strengths
+            strengths = result.get("strengths", [])
+            if strengths:
                 st.markdown("### 💪 Strengths")
-                for s in result["strengths"]:
+                for s in strengths:
                     st.markdown(f"✅ {s}")
 
-            if result.get("improvement_suggestions"):
+            suggestions = result.get("improvement_suggestions", [])
+            if suggestions:
                 st.markdown("### 📝 Suggestions")
-                for s in result["improvement_suggestions"]:
+                for s in suggestions:
                     st.markdown(f"💡 {s}")
+
+            overall = result.get("overall_feedback", "")
+            if overall:
+                st.info(overall)
 
 
 def show_ab_testing():
@@ -1070,15 +1205,15 @@ def show_ab_testing():
     if not resumes or len(resumes) < 2:
         st.info("You need at least 2 resumes to run A/B testing. Generate more resume variants!")
         if st.button("📄 Go to Resume Builder"):
-            st.session_state["current_page"] = "📄 Resume Builder"
+            # FIX #12: Use _navigate helper
+            _navigate("📄 Resume Builder")
             st.rerun()
         return
-
-    col1, col2 = st.columns(2)
 
     resume_titles = {f"{r['title']} (v{r['version']})": r for r in resumes}
     titles = list(resume_titles.keys())
 
+    col1, col2 = st.columns(2)
     with col1:
         st.markdown("### Version A")
         sel_a = st.selectbox("Select Resume A", titles, key="ab_a")
@@ -1094,7 +1229,6 @@ def show_ab_testing():
     st.markdown("---")
     st.markdown("### 📊 Comparison")
 
-    # Score comparison
     score_a = r_a.get("ats_score", 0) or 0
     score_b = r_b.get("ats_score", 0) or 0
 
@@ -1138,7 +1272,7 @@ def show_settings():
         st.info("To change AI settings, edit the `.env` file in the project root and restart the backend.")
         st.code("""# .env configuration
 GEMINI_API_KEY=your-gemini-api-key-here
-GEMINI_MODEL=gemini-2.0-flash
+GEMINI_MODEL=gemini-2.5-flash
 OPENAI_API_KEY=sk-your-key-here  # optional fallback
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.2
@@ -1153,7 +1287,7 @@ DEFAULT_MODEL_PROVIDER=gemini  # gemini, openai, ollama, auto
             full_name = st.text_input("Full Name", value=user.get("full_name", ""))
             current_role = st.text_input("Current Role", value=user.get("current_role", "") or "")
             target_role = st.text_input("Target Role", value=user.get("target_role", "") or "")
-            skills_str = st.text_input("Skills (comma-separated)", value=", ".join(user.get("skills", [])))
+            skills_str = st.text_input("Skills (comma-separated)", value=", ".join(user.get("skills", []) or []))
             exp_years = st.number_input("Years of Experience", value=user.get("experience_years", 0), min_value=0, max_value=50)
 
             if st.form_submit_button("Save Profile", use_container_width=True):
@@ -1167,7 +1301,6 @@ DEFAULT_MODEL_PROVIDER=gemini  # gemini, openai, ollama, auto
                 })
                 if result:
                     st.success("✅ Profile updated!")
-                    # Refresh user data
                     me = api.get_me()
                     if me:
                         st.session_state["user"] = me

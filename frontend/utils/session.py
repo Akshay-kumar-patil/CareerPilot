@@ -9,7 +9,7 @@ def init_session():
         "user": None,
         "authenticated": False,
         "ai_status": None,
-        "current_page": "Dashboard",
+        "current_page": "🏠 Dashboard",
     }
     for key, value in defaults.items():
         if key not in st.session_state:

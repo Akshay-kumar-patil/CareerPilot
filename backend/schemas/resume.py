@@ -3,13 +3,55 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
+class EducationDetail(BaseModel):
+    degree: str
+    school: str
+    dates: str
+    location: Optional[str] = None
+    grade: Optional[str] = None
+
+class ExperienceDetail(BaseModel):
+    title: str
+    company: str
+    dates: str
+    location: Optional[str] = None
+    bullets: List[str] = []
+
+class ProjectDetail(BaseModel):
+    name: str
+    tech_stack: Optional[str] = None
+    bullets: List[str] = []
+
+class CertificationDetail(BaseModel):
+    name: str
+    issuer: str
+    date: Optional[str] = None
+
+class ContactDetail(BaseModel):
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    location: Optional[str] = None
+    linkedin: Optional[str] = None
+    github: Optional[str] = None
+    portfolio: Optional[str] = None
+
+class ResumeDetails(BaseModel):
+    full_name: str
+    contact: ContactDetail
+    summary: Optional[str] = None
+    education: List[EducationDetail] = []
+    experience: List[ExperienceDetail] = []
+    projects: List[ProjectDetail] = []
+    skills: Dict[str, str] = {} # e.g. "Languages": "C++, Python", "Tools": "Git"
+    certifications: List[CertificationDetail] = []
+    achievements: List[str] = []
 
 class ResumeGenerateRequest(BaseModel):
-    job_description: str
+    job_description: Optional[str] = None
     existing_resume: Optional[str] = None
     template_id: Optional[int] = None
     additional_context: Optional[str] = None
-
+    resume_data: Optional[ResumeDetails] = None
 
 class ResumeGenerateResponse(BaseModel):
     id: int

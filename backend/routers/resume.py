@@ -16,11 +16,15 @@ router = APIRouter(prefix="/api/resume", tags=["Resume"])
 @router.post("/generate", response_model=ResumeGenerateResponse)
 def generate_resume(req: ResumeGenerateRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
+        context_str = req.existing_resume or ""
+        if req.resume_data:
+            context_str += "\n\nUser Data Input:\n" + req.resume_data.model_dump_json()
+            
         resume = resume_service.generate(
             db=db,
             user_id=current_user.id,
-            job_description=req.job_description,
-            existing_resume=req.existing_resume or "",
+            job_description=req.job_description or "No specific JD provided, create a general-purpose professional resume based on user data.",
+            existing_resume=context_str,
             template_id=req.template_id,
             additional_context=req.additional_context or "",
         )
@@ -88,7 +92,7 @@ def download_resume(resume_id: int, format: str, current_user: User = Depends(ge
     content = json.loads(resume.content) if isinstance(resume.content, str) else resume.content
 
     if format == "pdf":
-        html = file_service.render_template("resume_modern.html", content)
+        html = file_service.render_template("resume_reference.html", content)
         filepath = file_service.generate_pdf(html)
     elif format == "docx":
         filepath = file_service.generate_docx(content)

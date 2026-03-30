@@ -1,13 +1,17 @@
 """
 LangChain chain definitions for all AI features.
 Uses LCEL (LangChain Expression Language) for composable pipelines.
+
+Quota handling strategy:
+- Try primary provider (Gemini by default)
+- If 429 / RESOURCE_EXHAUSTED → mark router quota flag → immediately try Ollama
+- No retries — one attempt per provider, fail fast and fall through
 """
-import time
 import logging
 from typing import Optional
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from backend.ai.model_router import model_router
+from backend.ai.model_router import model_router, is_quota_error
 from backend.ai.prompts import (
     RESUME_GENERATION_PROMPT, RESUME_ANALYSIS_PROMPT, COVER_LETTER_PROMPT,
     RECRUITER_SIM_PROMPT, INTERVIEW_QUESTION_PROMPT, INTERVIEW_EVAL_PROMPT,
@@ -18,135 +22,122 @@ from backend.utils.helpers import clean_ai_response, safe_json_parse
 logger = logging.getLogger(__name__)
 
 
-def _build_chain(
-    prompt_template: str,
-    provider: Optional[str] = None,
-    temperature: float = 0.7,
-    # ROOT FIX: Pass max_tokens through so each chain can request the right amount.
-    # Previously this was hardcoded to 2000 in model_router.get_llm() default,
-    # which caused Gemini to truncate mid-JSON.
-    max_tokens: int = 8192,
-):
-    """Build a LangChain LCEL chain from a prompt template."""
-    prompt = ChatPromptTemplate.from_template(prompt_template)
-    llm = model_router.get_llm(provider=provider, temperature=temperature, max_tokens=max_tokens)
-    return prompt | llm | StrOutputParser()
-
-
-def _run_chain(
+def _invoke(
     prompt_template: str,
     inputs: dict,
     provider: Optional[str] = None,
     temperature: float = 0.7,
     max_tokens: int = 8192,
 ) -> str:
-    """Run a chain and handle errors with fallback to Ollama."""
+    """
+    Core invoke function — single attempt with clean Ollama fallback on quota error.
+
+    Flow:
+      1. Try primary provider (e.g. Gemini)
+      2. If quota error → mark exhausted on router → try Ollama once
+      3. Any other error → raise immediately (no silent swallowing)
+
+    Returns cleaned raw string from the LLM.
+    """
+    prompt = ChatPromptTemplate.from_template(prompt_template)
+
+    # Primary attempt
     try:
-        chain = _build_chain(prompt_template, provider=provider, temperature=temperature, max_tokens=max_tokens)
-        result = chain.invoke(inputs)
-        return clean_ai_response(result)
-    except Exception as e:
-        error_msg = str(e)
-        logger.error(f"Chain execution error: {error_msg}")
-        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-            print("Gemini quota exceeded")
-            logger.warning("Gemini quota exceeded")
-        
-        print("Switching to Ollama...")
-        logger.info("Switching to Ollama fallback...")
-        try:
-            fallback_chain = _build_chain(prompt_template, provider="ollama", temperature=temperature, max_tokens=max_tokens)
-            fallback_result = fallback_chain.invoke(inputs)
-            return clean_ai_response(fallback_result)
-        except Exception as fallback_e:
-            logger.error(f"Fallback chain execution error: {fallback_e}")
+        llm, used_provider = model_router.get_llm_with_fallback(
+            provider=provider, temperature=temperature, max_tokens=max_tokens
+        )
+        chain = prompt | llm | StrOutputParser()
+        raw = chain.invoke(inputs)
+        logger.info(f"LLM call succeeded via {used_provider}. Response length: {len(raw)}")
+        return clean_ai_response(raw)
+
+    except Exception as primary_err:
+        if is_quota_error(primary_err):
+            # Gemini quota hit — mark it and fall through to Ollama
+            logger.warning(f"Gemini quota/rate-limit error: {primary_err}")
+            model_router.mark_gemini_quota_exhausted()
+        else:
+            # Non-quota error (bad request, network, etc.) — don't hide it
+            logger.error(f"Primary LLM call failed (non-quota): {primary_err}")
             raise
 
+    # Ollama fallback — only reached after a quota error
+    logger.info("Falling back to Ollama after Gemini quota exhaustion...")
+    try:
+        ollama_llm = model_router.get_llm(provider="ollama", temperature=temperature, max_tokens=max_tokens)
+        chain = prompt | ollama_llm | StrOutputParser()
+        raw = chain.invoke(inputs)
+        logger.info(f"Ollama fallback succeeded. Response length: {len(raw)}")
+        return clean_ai_response(raw)
+    except Exception as ollama_err:
+        logger.error(f"Ollama fallback also failed: {ollama_err}")
+        raise RuntimeError(
+            f"Both primary provider and Ollama fallback failed. "
+            f"Ollama error: {ollama_err}"
+        )
 
-def _run_chain_json(
+
+def _invoke_json(
     prompt_template: str,
     inputs: dict,
     provider: Optional[str] = None,
     temperature: float = 0.7,
     max_tokens: int = 8192,
 ) -> dict:
-    """Run a chain expecting JSON output with 429 fallback to Ollama (no retries)."""
+    """
+    Invoke and parse JSON. No retries — one clean attempt.
+    Returns parsed dict or {"error": "..."} on failure.
+    """
     try:
-        chain = _build_chain(prompt_template, provider=provider, temperature=temperature, max_tokens=max_tokens)
-        raw = chain.invoke(inputs)
-        raw = clean_ai_response(raw)
-        logger.info(f"LLM JSON attempt 1. Raw length: {len(raw)}")
-
+        raw = _invoke(prompt_template, inputs, provider=provider,
+                      temperature=temperature, max_tokens=max_tokens)
         parsed = safe_json_parse(raw)
         if parsed and "error" not in parsed:
             return parsed
+        logger.error(f"JSON parse failed. Raw preview: {raw[:300]}")
+        return {"error": "Failed to parse AI response as JSON", "raw_preview": raw[:200]}
 
-        logger.warning("Failed to parse JSON on primary attempt.")
     except Exception as e:
-        error_msg = str(e)
-        logger.error(f"Primary attempt failed with exception: {error_msg}")
-        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-            print("Gemini quota exceeded")
-            logger.warning("Gemini quota exceeded")
-
-    # 🔥 FALLBACK TO OLLAMA
-    print("Switching to Ollama...")
-    logger.info("Switching to Ollama fallback for JSON...")
-    try:
-        fallback_chain = _build_chain(prompt_template, provider="ollama", temperature=temperature, max_tokens=max_tokens)
-        raw = fallback_chain.invoke(inputs)
-        raw = clean_ai_response(raw)
-        
-        parsed = safe_json_parse(raw)
-        if parsed and "error" not in parsed:
-            return parsed
-            
-    except Exception as fallback_e:
-        logger.error(f"Ollama fallback JSON execution error: {fallback_e}")
-
-    logger.error("AI execution and fallback failed to produce valid JSON.")
-    return {"error": "Failed to parse AI response."}
+        logger.error(f"_invoke_json failed: {e}")
+        return {"error": str(e)}
 
 
-# --- Resume Generation Chain ---
+# ─────────────────────────────────────────────
+# Public chain functions
+# ─────────────────────────────────────────────
+
 def generate_resume(
     job_description: str,
     existing_resume: str = "",
     additional_context: str = "",
     provider: Optional[str] = None,
 ) -> dict:
-    return _run_chain_json(
-        prompt_template=RESUME_GENERATION_PROMPT,
-        inputs={
+    return _invoke_json(
+        RESUME_GENERATION_PROMPT,
+        {
             "job_description": job_description,
             "existing_resume": existing_resume or "Not provided - generate from job description",
             "additional_context": additional_context or "None",
         },
-        provider=provider,
-        temperature=0.6,
-        max_tokens=8192
+        provider=provider, temperature=0.6, max_tokens=8192,
     )
 
 
-# --- Resume Analysis Chain ---
 def analyze_resume(
     resume_text: str,
     job_description: str = "",
     provider: Optional[str] = None,
 ) -> dict:
-    return _run_chain_json(
-        prompt_template=RESUME_ANALYSIS_PROMPT,
-        inputs={
+    return _invoke_json(
+        RESUME_ANALYSIS_PROMPT,
+        {
             "resume_text": resume_text,
-            "job_description": job_description or "No specific job description provided - do a general analysis",
+            "job_description": job_description or "No specific job description — do a general analysis",
         },
-        provider=provider,
-        temperature=0.2,
-        max_tokens=4096
+        provider=provider, temperature=0.2, max_tokens=4096,
     )
 
 
-# --- Cover Letter Chain ---
 def generate_cover_letter(
     company_name: str,
     role: str,
@@ -157,42 +148,33 @@ def generate_cover_letter(
     user_profile: str = "",
     provider: Optional[str] = None,
 ) -> str:
-    return _run_chain(
-        prompt_template=COVER_LETTER_PROMPT,
-        inputs={
-            "company_name": company_name,
-            "role": role,
+    """Returns plain text (not JSON)."""
+    return _invoke(
+        COVER_LETTER_PROMPT,
+        {
+            "company_name": company_name, "role": role,
             "job_description": job_description or "Not provided",
             "key_skills": key_skills or "Not specified",
             "tone": tone,
             "additional_context": additional_context or "None",
             "user_profile": user_profile or "Not provided",
         },
-        provider=provider,
-        temperature=0.7,
-        max_tokens=2048
+        provider=provider, temperature=0.7, max_tokens=2048,
     )
 
 
-# --- Recruiter Simulator Chain ---
 def simulate_recruiter(
     resume_text: str,
     job_description: str,
     provider: Optional[str] = None,
 ) -> dict:
-    return _run_chain_json(
-        prompt_template=RECRUITER_SIM_PROMPT,
-        inputs={
-            "resume_text": resume_text,
-            "job_description": job_description,
-        },
-        provider=provider,
-        temperature=0.4,
-        max_tokens=4096
+    return _invoke_json(
+        RECRUITER_SIM_PROMPT,
+        {"resume_text": resume_text, "job_description": job_description},
+        provider=provider, temperature=0.4, max_tokens=4096,
     )
 
 
-# --- Interview Question Generation Chain ---
 def generate_interview_questions(
     role: str,
     company: str = "",
@@ -201,60 +183,42 @@ def generate_interview_questions(
     num_questions: int = 5,
     provider: Optional[str] = None,
 ) -> dict:
-    return _run_chain_json(
-        prompt_template=INTERVIEW_QUESTION_PROMPT,
-        inputs={
-            "role": role,
-            "company": company or "a tech company",
-            "interview_type": interview_type,
-            "difficulty": difficulty,
+    return _invoke_json(
+        INTERVIEW_QUESTION_PROMPT,
+        {
+            "role": role, "company": company or "a tech company",
+            "interview_type": interview_type, "difficulty": difficulty,
             "num_questions": str(num_questions),
         },
-        provider=provider,
-        temperature=0.7,
-        max_tokens=4096
+        provider=provider, temperature=0.7, max_tokens=4096,
     )
 
 
-# --- Interview Evaluation Chain ---
 def evaluate_interview_answer(
     question: str,
     answer: str,
     role: str,
     provider: Optional[str] = None,
 ) -> dict:
-    return _run_chain_json(
-        prompt_template=INTERVIEW_EVAL_PROMPT,
-        inputs={
-            "question": question,
-            "answer": answer,
-            "role": role,
-        },
-        provider=provider,
-        temperature=0.3,
-        max_tokens=2048
+    return _invoke_json(
+        INTERVIEW_EVAL_PROMPT,
+        {"question": question, "answer": answer, "role": role},
+        provider=provider, temperature=0.3, max_tokens=2048,
     )
 
 
-# --- Skill Gap Analysis Chain ---
 def analyze_skill_gap(
     job_description: str,
     user_skills: str = "",
     provider: Optional[str] = None,
 ) -> dict:
-    return _run_chain_json(
-        prompt_template=SKILL_GAP_PROMPT,
-        inputs={
-            "job_description": job_description,
-            "user_skills": user_skills or "Not provided",
-        },
-        provider=provider,
-        temperature=0.5,
-        max_tokens=4096
+    return _invoke_json(
+        SKILL_GAP_PROMPT,
+        {"job_description": job_description, "user_skills": user_skills or "Not provided"},
+        provider=provider, temperature=0.5, max_tokens=4096,
     )
 
 
-# --- Email Generation Chain ---
 def generate_email(
     email_type: str,
     recipient_name: str = "",
@@ -264,45 +228,30 @@ def generate_email(
     tone: str = "professional",
     provider: Optional[str] = None,
 ) -> dict:
-    return _run_chain_json(
-        prompt_template=EMAIL_GENERATION_PROMPT,
-        inputs={
+    return _invoke_json(
+        EMAIL_GENERATION_PROMPT,
+        {
             "email_type": email_type,
             "recipient_name": recipient_name or "Hiring Manager",
             "company": company or "the company",
             "role": role or "the position",
-            "context": context or "None",
-            "tone": tone,
+            "context": context or "None", "tone": tone,
         },
-        provider=provider,
-        temperature=0.7,
-        max_tokens=1024
+        provider=provider, temperature=0.7, max_tokens=1024,
     )
 
 
-# --- GitHub Analysis Chain ---
-def analyze_github_repos(
-    repos_data: str,
-    provider: Optional[str] = None,
-) -> dict:
-    return _run_chain_json(
-        prompt_template=GITHUB_ANALYSIS_PROMPT,
-        inputs={"repos_data": repos_data},
-        provider=provider,
-        temperature=0.6,
-        max_tokens=4096
+def analyze_github_repos(repos_data: str, provider: Optional[str] = None) -> dict:
+    return _invoke_json(
+        GITHUB_ANALYSIS_PROMPT,
+        {"repos_data": repos_data},
+        provider=provider, temperature=0.6, max_tokens=4096,
     )
 
 
-# --- JD Extraction Chain ---
-def extract_jd_info(
-    jd_text: str,
-    provider: Optional[str] = None,
-) -> dict:
-    return _run_chain_json(
-        prompt_template=JD_EXTRACTION_PROMPT,
-        inputs={"jd_text": jd_text},
-        provider=provider,
-        temperature=0.2,
-        max_tokens=2048
+def extract_jd_info(jd_text: str, provider: Optional[str] = None) -> dict:
+    return _invoke_json(
+        JD_EXTRACTION_PROMPT,
+        {"jd_text": jd_text},
+        provider=provider, temperature=0.2, max_tokens=2048,
     )

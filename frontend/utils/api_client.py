@@ -10,7 +10,7 @@ BASE_URL = os.environ.get("API_BASE_URL", "https://career-portal-m5re.onrender.c
 
 # FIX #9: Define standard timeouts as constants so they're consistent everywhere
 _TIMEOUT_SHORT = 10    # for simple read/write operations
-_TIMEOUT_AI = 120      # for AI generation calls (can be slow)
+_TIMEOUT_AI = 300      # for AI generation calls (Render free-tier + LLM can take 3-5 min)
 
 
 def _headers() -> dict:

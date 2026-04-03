@@ -83,7 +83,7 @@ def get_versions(resume_id: int, current_user: User = Depends(get_current_user),
     ]
 
 
-@router.post("/{resume_id}/download/{format}")
+@router.get("/{resume_id}/download/{format}")
 def download_resume(resume_id: int, format: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     resume = resume_service.get_by_id(db, resume_id, current_user.id)
     if not resume:
@@ -94,17 +94,43 @@ def download_resume(resume_id: int, format: str, current_user: User = Depends(ge
     if format == "pdf":
         html = file_service.render_template("resume_reference.html", content)
         filepath = file_service.generate_pdf(html)
+        # If weasyprint isn't available, generate_pdf returns .html fallback
+        if filepath and filepath.endswith(".html"):
+            return FileResponse(filepath, filename="resume.html", media_type="text/html")
     elif format == "docx":
         filepath = file_service.generate_docx(content)
     elif format == "txt":
         filepath = file_service.generate_txt(content)
+    elif format == "html":
+        # Direct HTML download
+        html = file_service.render_template("resume_reference.html", content)
+        import os, uuid
+        from backend.config import settings
+        html_path = os.path.join(settings.GENERATED_DIR, f"resume_{uuid.uuid4().hex[:8]}.html")
+        with open(html_path, "w", encoding="utf-8") as f:
+            f.write(html)
+        filepath = html_path
     else:
-        raise HTTPException(status_code=400, detail="Invalid format. Use: pdf, docx, txt")
+        raise HTTPException(status_code=400, detail="Invalid format. Use: pdf, docx, txt, html")
 
     if not filepath:
         raise HTTPException(status_code=500, detail="File generation failed")
 
-    return FileResponse(filepath, filename=f"resume.{format}", media_type="application/octet-stream")
+    # Determine proper media type
+    if filepath.endswith(".pdf"):
+        media_type = "application/pdf"
+        dl_name = "resume.pdf"
+    elif filepath.endswith(".html"):
+        media_type = "text/html"
+        dl_name = "resume.html"
+    elif filepath.endswith(".docx"):
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        dl_name = "resume.docx"
+    else:
+        media_type = "application/octet-stream"
+        dl_name = f"resume.{format}"
+
+    return FileResponse(filepath, filename=dl_name, media_type=media_type)
 
 
 @router.delete("/{resume_id}")

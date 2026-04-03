@@ -333,80 +333,109 @@ def show_dashboard():
 
 def show_resume_builder():
     st.markdown('<h1 class="main-header">📄 Resume Builder</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Generate ATS-optimized resumes tailored to any job description</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">Generate ATS-optimized developer resumes powered by AI</p>', unsafe_allow_html=True)
 
     tab1, tab2 = st.tabs(["✨ Generate New", "📋 My Resumes"])
 
     with tab1:
-        st.info("💡 Fill in your details below. The AI will optimize your content for the target Job Description.")
+        st.info("💡 Fill in your details below. The AI agent will analyze your data and generate a professional developer resume matching top-tier formats.")
 
         c1, c2 = st.columns([1.5, 1])
 
         with c1:
-            # FIX #7: Use logged-in user's data as defaults instead of hardcoded personal info
             user = st.session_state.get("user", {})
 
+            # ── Personal Information ──
             with st.expander("👤 Personal Information", expanded=True):
                 fname = st.text_input("Full Name *", value=user.get("full_name", ""))
-                st.markdown("**Contact Links**")
-                cc1, cc2, cc3 = st.columns(3)
-                loc = cc1.text_input("Location", "")
-                email = cc2.text_input("Email", value=user.get("email", ""))
-                phone = cc3.text_input("Phone", "")
-                cc4, cc5, cc6 = st.columns(3)
-                linked = cc4.text_input("LinkedIn", "")
-                github = cc5.text_input("GitHub", value=f"github.com/{user.get('github_username', '')}" if user.get("github_username") else "")
-                port = cc6.text_input("Portfolio", value=user.get("portfolio_url", "") or "")
+                st.markdown("**Contact Information**")
+                cc1, cc2 = st.columns(2)
+                email = cc1.text_input("Email *", value=user.get("email", ""))
+                phone = cc2.text_input("Phone", "")
+                cc3, cc4 = st.columns(2)
+                loc = cc3.text_input("Location", "", placeholder="Mumbai, Maharashtra")
+                port = cc4.text_input("Portfolio Website", value=user.get("portfolio_url", "") or "", placeholder="your-portfolio.com")
 
+                st.markdown("**Social & Coding Profiles**")
+                cc5, cc6 = st.columns(2)
+                linked = cc5.text_input("LinkedIn URL", "", placeholder="linkedin.com/in/username")
+                github = cc6.text_input("GitHub URL", value=f"github.com/{user.get('github_username', '')}" if user.get("github_username") else "", placeholder="github.com/username")
+                cc7, cc8 = st.columns(2)
+                leetcode = cc7.text_input("LeetCode URL", "", placeholder="leetcode.com/username")
+                codechef = cc8.text_input("Other Coding Profile", "", placeholder="codechef.com/username")
+
+            # ── Summary ──
+            with st.expander("📝 Professional Summary"):
+                summary_text = st.text_area(
+                    "Write a brief professional summary (2-3 sentences). AI will optimize it.",
+                    height=80,
+                    placeholder="Computer Science student with expertise in full-stack development, IoT systems, and cloud computing. Experienced in developing scalable solutions and leading technical teams.",
+                )
+
+            # ── Education ──
             with st.expander("🎓 Education"):
+                st.caption("Format: `Degree | School | Location | Dates | Grade`")
                 edu_text = st.text_area(
-                    "Format: Degree | School | Location | Dates | Grade",
+                    "Education entries (one per line)",
                     height=100,
-                    placeholder="Bachelor of Technology | MIT | Cambridge, MA | 2020-2024 | GPA: 3.8",
+                    placeholder="Bachelor of Technology — Computer Science | Gyan Ganga Institute | Bhopal, MP | 2022-2026 | CGPA: 8.02\nHigher Secondary Education (12th - PCM) | Board of Secondary Education | MP | 2020-2021 | Percentage: 91%",
                 )
 
-            with st.expander("💼 Experience"):
-                exp_text = st.text_area(
-                    "Format: Role | Company | Location | Dates\n- Bullet 1\n- Bullet 2",
-                    height=150,
-                    placeholder="Software Engineer | Google | Remote | Jan 2024 - Present\n- Built scalable APIs serving 10M+ requests/day\n- Led a team of 4 engineers",
-                )
-
-            with st.expander("🚀 Projects"):
-                proj_text = st.text_area(
-                    "Format: Name | Tech Stack\n- Bullet 1\n- Bullet 2",
-                    height=150,
-                    placeholder="My Project | Python, FastAPI, React\n- Built an end-to-end ML pipeline\n- Achieved 95% accuracy on benchmark",
-                )
-
-            with st.expander("🔧 Skills & Others"):
-                # FIX #7: Use user's existing skills as default
+            # ── Technical Skills ──
+            with st.expander("🔧 Technical Skills"):
+                st.caption("Format: `Category: Skill1, Skill2, Skill3`")
                 existing_skills = ", ".join(user.get("skills", []))
                 skills_text = st.text_area(
-                    "Skills (Format: Category: Skill1, Skill2)",
+                    "Skills by category (one category per line)",
                     value=f"Skills: {existing_skills}" if existing_skills else "",
                     height=100,
-                    placeholder="Languages: Python, C++\nLibraries: PyTorch, FastAPI\nTools: Git, Docker",
+                    placeholder="Programming & Databases: Python, JavaScript, Java, C/C++, SQL, MySQL, PostgreSQL, MongoDB\nFrameworks & Libraries: React.js, React Native, Node.js, Express.js, FastAPI, HTML5, CSS3\nCloud, DevOps & Tools: AWS, Google Cloud, Docker, Git, CI/CD, VS Code, Socket.io",
                 )
+
+            # ── Experience ──
+            with st.expander("💼 Experience"):
+                st.caption("Format: `Role | Company | Location | Dates`\nThen bullet points starting with `-`")
+                exp_text = st.text_area(
+                    "Experience entries",
+                    height=180,
+                    placeholder="Frappe Developer Intern | Alfastack Solutions Pvt Ltd | Remote | Sep 2025 – Dec 2025\n- Developed supplier portal using Frappe framework and React Frappe SDK\n- Built customer experience portal with Frappe REST APIs\n- Developed computer vision defect detection system using YOLOv8 and OpenCV\n\nFull Stack Developer & Development Team Lead | Ouranos Robotics Private Limited | Remote | Aug 2024 – Sep 2025\n- Led development team of 5+ members, establishing agile processes\n- Engineered real-time IoT monitoring platform using React, Node.js, and MQTT",
+                )
+
+            # ── Projects ──
+            with st.expander("🚀 Projects"):
+                st.caption("Format: `Name | Tech Stack | Live URL | Repo URL`\nThen bullet points starting with `-`")
+                proj_text = st.text_area(
+                    "Project entries",
+                    height=180,
+                    placeholder="PostgreSQL Cloud RDBMS Management System | PERN Stack, NeonDB | postgresstore-step.onrender.com | github.com/user/repo\n- Built secure cloud-based database system with role-based access control\n\nRoomieQ India - Roommate Finder | MERN Stack | | github.com/user/roomieq\n- Built full-stack application with real-time chat and filtering algorithms\n- Reduced application latency by 40% through optimization",
+                )
+
+            # ── Certifications ──
+            with st.expander("📜 Certifications"):
+                st.caption("Format: `Name | Issuer | Date`")
                 cert_text = st.text_area(
-                    "Certifications (Format: Name | Issuer | Date)",
-                    height=70,
-                    placeholder="AWS Solutions Architect | Amazon | Jun 2024",
+                    "Certifications (one per line)",
+                    height=80,
+                    placeholder="AWS Cloud Practitioner | Amazon Web Services | 2024\nCisco CCNA (ITN, SRWE, ENSA) | Cisco | 2024\nJava Programming | Oracle Certified Associate | 2023",
                 )
-                # FIX #5: Use real newlines in default text, not escaped \\n
+
+            # ── Achievements ──
+            with st.expander("🏆 Achievements"):
                 achiev_text = st.text_area(
                     "Achievements (one per line)",
-                    height=70,
-                    placeholder="LeetCode: 300+ problems solved.\nFinalist, Hackathon 2024.",
+                    height=80,
+                    placeholder="TCS CodeVita 2025: AIR 4905 in Round 2 of TCS CodeVita Season 13\nSecond Place in TechSynergy IoT Showcase at Gyanostsav 2025\n3-Time College Topper on Code360 Leaderboard",
                 )
 
+            # ── Target JD ──
             with st.expander("🎯 Target Job Description", expanded=True):
-                jd = st.text_area("Job Description (optional — AI optimizes bullets for this JD)", height=200)
-                context = st.text_input("Additional Instructions for AI", placeholder="e.g. Keep bullets under 12 words.")
+                jd = st.text_area("Job Description (optional — AI optimizes for this JD)", height=150)
+                context = st.text_input("Additional Instructions for AI", placeholder="e.g. Focus on backend skills, keep it to 1 page")
 
+        # ── Right Column: Generate & Preview ──
         with c2:
-            st.markdown("### Generate & Preview")
-            if st.button("🚀 Generate Resume", use_container_width=True, type="primary"):
+            st.markdown("### 🚀 Generate & Preview")
+            if st.button("🧠 Generate Resume with AI", use_container_width=True, type="primary"):
                 if not fname:
                     st.warning("Full name is required!")
                 else:
@@ -421,7 +450,7 @@ def show_resume_builder():
                             res.append({"degree": p[0], "school": p[1], "location": p[2], "dates": p[3], "grade": p[4]})
                         return res
 
-                    def parse_exp_proj(text, is_proj=False):
+                    def parse_exp(text):
                         res = []
                         curr = None
                         bullets = []
@@ -437,14 +466,38 @@ def show_resume_builder():
                                     res.append(curr)
                                     bullets = []
                                 p = [x.strip() for x in line.split("|")]
-                                if is_proj:
-                                    while len(p) < 2:
-                                        p.append("")
-                                    curr = {"name": p[0], "tech_stack": p[1]}
-                                else:
-                                    while len(p) < 4:
-                                        p.append("")
-                                    curr = {"title": p[0], "company": p[1], "location": p[2], "dates": p[3]}
+                                while len(p) < 4:
+                                    p.append("")
+                                curr = {"title": p[0], "company": p[1], "location": p[2], "dates": p[3]}
+                        if curr:
+                            curr["bullets"] = bullets
+                            res.append(curr)
+                        return res
+
+                    def parse_projects(text):
+                        res = []
+                        curr = None
+                        bullets = []
+                        for line in text.split("\n"):
+                            line = line.strip()
+                            if not line:
+                                continue
+                            if line.startswith("-") or line.startswith("•"):
+                                bullets.append(line.lstrip("-• "))
+                            else:
+                                if curr:
+                                    curr["bullets"] = bullets
+                                    res.append(curr)
+                                    bullets = []
+                                p = [x.strip() for x in line.split("|")]
+                                while len(p) < 4:
+                                    p.append("")
+                                curr = {
+                                    "name": p[0],
+                                    "tech_stack": p[1],
+                                    "live_url": p[2] if p[2] else "",
+                                    "repo_url": p[3] if p[3] else "",
+                                }
                         if curr:
                             curr["bullets"] = bullets
                             res.append(curr)
@@ -469,90 +522,208 @@ def show_resume_builder():
                             res.append({"name": p[0], "issuer": p[1], "date": p[2]})
                         return res
 
-                    # FIX #5: split on real newlines — achiev_text already contains them
                     achievs = [l.strip() for l in achiev_text.split("\n") if l.strip()]
+
+                    # Build contact with all links
+                    contact_data = {
+                        "location": loc, "email": email, "phone": phone,
+                        "linkedin": linked, "github": github,
+                        "portfolio": port, "leetcode": leetcode,
+                    }
+                    # Add other coding profile if provided
+                    if codechef:
+                        contact_data["codechef"] = codechef
 
                     resume_data = {
                         "full_name": fname,
-                        "contact": {"location": loc, "email": email, "phone": phone, "linkedin": linked, "github": github, "portfolio": port},
+                        "contact": contact_data,
+                        "summary": summary_text,
                         "education": parse_edus(edu_text),
-                        "experience": parse_exp_proj(exp_text, is_proj=False),
-                        "projects": parse_exp_proj(proj_text, is_proj=True),
+                        "experience": parse_exp(exp_text),
+                        "projects": parse_projects(proj_text),
                         "skills": parse_skills(skills_text),
                         "certifications": parse_certs(cert_text),
                         "achievements": achievs,
                     }
 
-                    with st.spinner("🧠 AI is generating your resume..."):
+                    with st.spinner("🧠 AI Agent is analyzing your data and building your resume..."):
                         result = api.generate_resume(
                             jd or "",
                             existing_resume=json.dumps(resume_data, indent=2),
                             additional_context=context,
                         )
                         if result:
-                            st.success(f"✅ Resume generated! ATS Score: {result.get('ats_score', 'N/A')}")
                             st.session_state["last_resume"] = result
-                            # FIX #8: Clear cached PDF when a new resume is generated
+                            # Clear cached PDF/DOCX when a new resume is generated
                             resume_id = result.get("id")
-                            if resume_id and f"pdf_{resume_id}" in st.session_state:
-                                del st.session_state[f"pdf_{resume_id}"]
+                            if resume_id:
+                                for k in [f"pdf_{resume_id}", f"docx_{resume_id}"]:
+                                    st.session_state.pop(k, None)
 
+            # ── Display Generated Resume ──
             if "last_resume" in st.session_state:
                 r = st.session_state["last_resume"]
                 resume_id = r.get("id")
+                ats_score = r.get("ats_score") or 0
 
-                # FIX #8: Cache PDF in session state — don't re-download on every rerun
+                # ── ATS Score Display ──
+                st.markdown("---")
+                st.markdown("### 📊 ATS Score")
+                score_color = "#4ECDC4" if ats_score >= 70 else ("#FFD93D" if ats_score >= 40 else "#FF6B6B")
+                score_label = "Excellent" if ats_score >= 70 else ("Good" if ats_score >= 50 else ("Needs Work" if ats_score >= 30 else "Low"))
+                st.markdown(f"""
+                <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #1A1F2E 0%, #252B3B 100%); border-radius: 16px; border: 1px solid rgba(108, 99, 255, 0.2); margin-bottom: 1rem;">
+                    <div style="font-size: 3.5rem; font-weight: 700; color: {score_color}; line-height: 1;">{ats_score}</div>
+                    <div style="font-size: 0.85rem; color: #8892B0; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px;">ATS Score</div>
+                    <div style="font-size: 1rem; font-weight: 600; color: {score_color}; margin-top: 4px;">{score_label}</div>
+                    <div style="margin-top: 8px; background: #0E1117; border-radius: 8px; height: 8px; overflow: hidden;">
+                        <div style="width: {ats_score}%; height: 100%; background: {score_color}; border-radius: 8px; transition: width 0.5s;"></div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # Show keyword analysis
+                kw_matched = r.get("keywords_matched", [])
+                kw_missing = r.get("keywords_missing", [])
+                if kw_matched:
+                    with st.expander(f"✅ Matched Keywords ({len(kw_matched)})"):
+                        st.write(", ".join(kw_matched[:20]))
+                if kw_missing:
+                    with st.expander(f"❌ Missing Keywords ({len(kw_missing)})"):
+                        st.write(", ".join(kw_missing[:15]))
+
+                # ── PDF Preview ──
+                st.markdown("### 📄 Resume Preview")
                 pdf_cache_key = f"pdf_{resume_id}"
                 if resume_id and pdf_cache_key not in st.session_state:
-                    with st.spinner("Loading PDF preview..."):
+                    with st.spinner("Rendering PDF preview..."):
                         st.session_state[pdf_cache_key] = api.download_resume(resume_id, "pdf")
 
                 pdf_data = st.session_state.get(pdf_cache_key) if resume_id else None
 
-                st.markdown("---")
                 if pdf_data:
-                    b64_pdf = base64.b64encode(pdf_data).decode("utf-8")
-                    # FIX #13 (suggestion): Safer PDF embed using object tag instead of raw base64 iframe
-                    st.markdown(
-                        f'<iframe src="data:application/pdf;base64,{b64_pdf}" width="100%" height="500px" type="application/pdf"></iframe>',
-                        unsafe_allow_html=True,
-                    )
+                    try:
+                        # Check if it's actually HTML (common fallback)
+                        is_html = pdf_data.strip().startswith(b"<!DOCTYPE") or pdf_data.strip().startswith(b"<html")
+                        if is_html:
+                            st.info("ℹ️ PDF engine (WeasyPrint) requires system libraries. Showing high-fidelity HTML preview instead.")
+                            b64_html = base64.b64encode(pdf_data).decode("utf-8")
+                            st.markdown(
+                                f'<iframe src="data:text/html;base64,{b64_html}" width="100%" height="600px" style="border: 1px solid rgba(108, 99, 255, 0.3); border-radius: 8px; background: white;"></iframe>',
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            b64_pdf = base64.b64encode(pdf_data).decode("utf-8")
+                            st.markdown(
+                                f'<iframe src="data:application/pdf;base64,{b64_pdf}" width="100%" height="600px" style="border: 1px solid rgba(108, 99, 255, 0.3); border-radius: 8px;"></iframe>',
+                                unsafe_allow_html=True,
+                            )
+                    except Exception as e:
+                        st.error(f"Error rendering preview: {e}")
+                else:
+                    # Fallback: Show resume content as formatted text
+                    content = r.get("content", {})
+                    if content:
+                        st.markdown(f"**{content.get('full_name', '')}**")
+                        if content.get("summary"):
+                            st.write(content["summary"])
+                        st.caption("⚠️ PDF preview not available. Download the resume to view the full formatted version.")
 
-                st.markdown("---")
+                # ── Download Buttons ──
+                st.markdown("### 📥 Download Resume")
                 dc1, dc2 = st.columns(2)
-                if resume_id and pdf_data:
+                if resume_id:
                     with dc1:
-                        st.download_button(
-                            "📥 Download PDF", pdf_data,
-                            f"{fname.replace(' ', '_')}_Resume.pdf",
-                            "application/pdf", type="primary", use_container_width=True,
-                        )
+                        # PDF/HTML Dynamic Download
+                        if pdf_data:
+                            # Detect if it's HTML fallback
+                            is_html = pdf_data.strip().startswith(b"<!DOCTYPE") or pdf_data.strip().startswith(b"<html")
+                            ext = "html" if is_html else "pdf"
+                            mime = "text/html" if is_html else "application/pdf"
+                            st.download_button(
+                                f"📥 Download {ext.upper()}", pdf_data,
+                                f"Resume_{resume_id}.{ext}", mime,
+                                key=f"dl_pdf_gen_{resume_id}", type="primary", use_container_width=True
+                            )
                     with dc2:
-                        # FIX #8: Cache DOCX too
+                        # DOCX Download
                         docx_key = f"docx_{resume_id}"
                         if docx_key not in st.session_state:
                             st.session_state[docx_key] = api.download_resume(resume_id, "docx")
                         data_docx = st.session_state.get(docx_key)
                         if data_docx:
-                            st.download_button("📥 Download DOCX", data_docx, "resume.docx", use_container_width=True)
+                            st.download_button(
+                                "📥 Download DOCX", data_docx,
+                                f"Resume_{resume_id}.docx",
+                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                key=f"dl_docx_gen_{resume_id}", use_container_width=True
+                            )
+
+                st.success(f"✅ Resume generated successfully! ATS Score: {ats_score}/100")
 
     with tab2:
         resumes = api.list_resumes()
         if resumes:
             for r in resumes:
                 with st.expander(f"📄 {r.get('title', 'Resume')} | ATS: {r.get('ats_score', 'N/A')} | v{r.get('version', 1)}"):
-                    full = api.get_resume(r["id"])
-                    if full:
-                        dc1, dc2 = st.columns(2)
-                        with dc1:
-                            if st.button("📥 Download PDF", key=f"dl_pdf_{r['id']}"):
-                                pd_data = api.download_resume(r["id"], "pdf")
-                                if pd_data:
-                                    st.download_button("Click to Save PDF", pd_data, "resume.pdf", "application/pdf", key=f"dl_pdf_btn_{r['id']}")
-                        with dc2:
-                            st.json(full.get("content", {}))
+                    rid = r["id"]
+                    c1, c2 = st.columns(2)
+                    
+                    # Store data in session state to avoid multiple API calls
+                    pdf_key = f"list_pdf_{rid}"
+                    docx_key = f"list_docx_{rid}"
+                    
+                    if pdf_key not in st.session_state:
+                        with st.spinner("Loading PDF..."):
+                            st.session_state[pdf_key] = api.download_resume(rid, "pdf")
+                    if docx_key not in st.session_state:
+                        with st.spinner("Loading DOCX..."):
+                            st.session_state[docx_key] = api.download_resume(rid, "docx")
+                            
+                    with c1:
+                        p_data = st.session_state.get(pdf_key)
+                        if p_data:
+                            is_html_list = p_data.strip().startswith(b"<!DOCTYPE") or p_data.strip().startswith(b"<html")
+                            ext_list = "html" if is_html_list else "pdf"
+                            mime_list = "text/html" if is_html_list else "application/pdf"
+                            st.download_button(
+                                f"📥 Download {ext_list.upper()}", p_data,
+                                f"Resume_{rid}.{ext_list}", mime_list,
+                                key=f"dl_pdf_list_{rid}", use_container_width=True
+                            )
+                    with c2:
+                        d_data = st.session_state.get(docx_key)
+                        if d_data:
+                            st.download_button(
+                                "📥 Download DOCX", d_data,
+                                f"Resume_{rid}.docx",
+                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                key=f"dl_docx_list_{rid}", use_container_width=True
+                            )
+                    
+                    if st.button("🗑️ Delete", key=f"del_{rid}"):
+                        if api.delete_resume(rid):
+                            st.success("Deleted!")
+                            st.rerun()
+                        st.markdown("---")
+                        content = full.get("content", {})
+                        if isinstance(content, dict):
+                            st.markdown(f"**Name:** {content.get('full_name', 'N/A')}")
+                            if content.get("summary"):
+                                st.markdown(f"**Summary:** {content['summary'][:200]}...")
+                            if content.get("skills"):
+                                st.markdown("**Skills:**")
+                                for cat, skills_val in content["skills"].items():
+                                    if isinstance(skills_val, list):
+                                        st.markdown(f"  • **{cat}:** {', '.join(skills_val)}")
+                                    else:
+                                        st.markdown(f"  • **{cat}:** {skills_val}")
+                        else:
+                            st.json(content)
         else:
             st.info("No resumes yet. Generate your first one!")
+
+
 
 
 

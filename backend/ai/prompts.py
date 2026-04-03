@@ -3,9 +3,10 @@ Prompt templates for all AI features.
 Each prompt is designed for structured JSON output where possible.
 """
 
-RESUME_GENERATION_PROMPT = """You are an expert resume writer specializing in ATS-optimized resumes.
+RESUME_GENERATION_PROMPT = """You are an expert resume writer specializing in ATS-optimized developer resumes.
 
 Given the following job description and user information, generate a professional, ATS-optimized resume.
+Your goal is to create a resume that looks like a top-tier developer resume with strong formatting.
 
 **Job Description:**
 {job_description}
@@ -16,45 +17,86 @@ Given the following job description and user information, generate a professiona
 **Additional Context:**
 {additional_context}
 
-Generate a complete resume in the following JSON format. If specific fields like github or portfolio are missing, leave them empty or null.
+Generate a complete resume in the following JSON format. Every field must be present.
+If a field has no data, use an empty string "" or empty array [].
+Do NOT omit any field. Do NOT add extra text outside the JSON.
+
 {{
-    "full_name": "...",
-    "contact": {{"email": "...", "phone": "...", "linkedin": "...", "github": "...", "portfolio": "...", "location": "..."}},
-    "summary": "A 2-3 sentence professional summary tailored to the job",
-    "experience": [
+    "full_name": "First Last",
+    "contact": {{
+        "email": "email@example.com",
+        "phone": "+91-XXXXXXXXXX",
+        "linkedin": "linkedin.com/in/username",
+        "github": "github.com/username",
+        "portfolio": "portfolio-url.com",
+        "location": "City, State",
+        "leetcode": "leetcode.com/username"
+    }},
+    "summary": "A 2-3 sentence professional summary. Mention expertise areas, years of experience, and key strengths relevant to the target role.",
+    "education": [
         {{
-            "title": "...",
-            "company": "...",
-            "location": "...",
-            "dates": "...",
-            "bullets": ["Achievement-oriented bullet using metrics and action verbs"]
+            "degree": "Bachelor of Technology — Computer Science",
+            "school": "University Name",
+            "location": "City, State",
+            "dates": "2020-2024",
+            "grade": "CGPA: 8.5",
+            "highlights": []
         }}
     ],
-    "education": [
-        {{"degree": "...", "school": "...", "location": "...", "dates": "...", "grade": "...", "highlights": []}}
-    ],
     "skills": {{
-        "Languages": ["..."],
-        "Library": ["..."],
-        "DataBase": ["..."],
-        "Tools/Platform/Automation Platform": ["..."]
+        "Programming & Databases": "Python, JavaScript, Java, C/C++, SQL, MySQL, PostgreSQL, MongoDB, Firebase, Redis",
+        "Frameworks & Libraries": "React.js, React Native, Node.js, Express.js, FastAPI, HTML5, CSS3, Three.js",
+        "Cloud, DevOps & Tools": "AWS, Google Cloud Platform, Docker, Git, CI/CD, VS Code, Socket.io, MQTT"
     }},
+    "experience": [
+        {{
+            "title": "Full Stack Developer",
+            "company": "Company Name",
+            "location": "Remote",
+            "dates": "Jan 2024 — Present",
+            "bullets": [
+                "Developed X feature using Y technology, resulting in Z% improvement",
+                "Built customer-facing APIs serving 10K+ requests/day",
+                "Led team of N engineers implementing agile processes"
+            ]
+        }}
+    ],
     "projects": [
-        {{"name": "...", "tech_stack": "...", "bullets": ["..."]}}
+        {{
+            "name": "Project Name",
+            "tech_stack": "React, Node.js, MongoDB",
+            "live_url": "project-live-url.com",
+            "repo_url": "github.com/user/repo",
+            "bullets": [
+                "Built full-stack application with real-time features",
+                "Reduced latency by 40% through optimization"
+            ]
+        }}
     ],
     "certifications": [
-        {{"name": "...", "issuer": "...", "date": "..."}}
+        {{
+            "name": "AWS Cloud Practitioner",
+            "issuer": "Amazon Web Services",
+            "date": "2024"
+        }}
     ],
-    "achievements": ["..."]
+    "achievements": [
+        "Won 1st place in XYZ Hackathon 2024",
+        "3-Time College Topper on Code360 Leaderboard"
+    ]
 }}
 
-Rules:
-1. Use strong action verbs (Led, Developed, Implemented, Optimized)
-2. Include quantifiable metrics wherever possible
-3. Match keywords from the job description naturally
-4. Keep bullet points concise (1-2 lines each)
-5. Return ONLY the JSON, no other text
+CRITICAL RULES:
+1. Use strong action verbs (Led, Developed, Implemented, Optimized, Engineered, Built)
+2. Include quantifiable metrics wherever possible (%, numbers, scale)
+3. Match keywords from the job description naturally into experience and skills
+4. Keep bullet points concise (1-2 lines each, under 20 words)
+5. For skills, use comma-separated strings grouped by category
+6. Return ONLY valid JSON — no markdown fences, no explanation text before or after
+7. Preserve the user's actual data (name, contact, education, etc.) — do NOT invent personal details
+8. Enhance and optimize bullet points for ATS but keep them truthful
 """
+
 
 # ROOT FIX: Prompt rewritten to produce SHORT, bounded output.
 # The previous prompt had no length constraints, so Gemini would write

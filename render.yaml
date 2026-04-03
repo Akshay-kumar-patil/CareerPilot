@@ -3,7 +3,7 @@ services:
   - type: web
     name: career-platform-api
     runtime: docker
-    plan: free # Change if needed
+    plan: free
     envVars:
       - key: PORT
         value: "8000"
@@ -15,3 +15,16 @@ services:
         generateValue: true
       - key: DEFAULT_MODEL_PROVIDER
         value: "auto"
+
+  - type: web
+    name: career-platform-ui
+    runtime: docker
+    dockerfilePath: Dockerfile.frontend
+    plan: free
+    envVars:
+      - key: PORT
+        value: "8501"
+      - key: API_BASE_URL
+        value: "https://career-portal-m5re.onrender.com"
+      - key: PYTHON_VERSION
+        value: "3.11.0"

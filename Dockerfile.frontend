@@ -20,6 +20,9 @@ COPY .env ./
 # Expose Streamlit default port
 EXPOSE 8501
 
+# Set the backend API URL explicitly for this frontend container
+ENV API_BASE_URL="https://career-portal-m5re.onrender.com"
+
 # Start Streamlit securely
 # Using shell form to resolve the $PORT environment variable
 CMD streamlit run frontend/app.py --server.port=${PORT:-8501} --server.address=0.0.0.0

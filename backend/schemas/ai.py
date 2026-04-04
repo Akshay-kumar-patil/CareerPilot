@@ -4,7 +4,7 @@ from typing import Optional, List, Dict, Any
 
 
 class AIModelConfig(BaseModel):
-    provider: str = "auto"  # openai, ollama, auto
+    provider: str = "auto"  # openai, groq, auto
     model: Optional[str] = None
     temperature: float = 0.7
     max_tokens: int = 2000

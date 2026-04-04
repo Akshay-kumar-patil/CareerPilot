@@ -9,12 +9,20 @@ services:
         value: "8000"
       - key: PYTHON_VERSION
         value: "3.11.0"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: "gemini-2.5-flash"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: "llama-3.3-70b-versatile"
       - key: OPENAI_API_KEY
         sync: false
       - key: SECRET_KEY
         generateValue: true
       - key: DEFAULT_MODEL_PROVIDER
-        value: "auto"
+        value: "gemini"
 
   - type: web
     name: career-platform-ui

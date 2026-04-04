@@ -64,6 +64,13 @@ def _invoke(
     # Groq fallback — only reached after a quota error
     logger.info("Falling back to Groq (llama-3.3-70b-versatile) after Gemini quota exhaustion...")
     try:
+        from backend.config import settings
+        if not settings.GROQ_API_KEY:
+            raise ValueError(
+                "Gemini API key is expired or exhausted, and Groq fallback is unavailable "
+                "because GROQ_API_KEY is not set. Please update your AI API keys."
+            )
+            
         groq_llm = model_router.get_llm(provider="groq", temperature=temperature, max_tokens=max_tokens)
         chain = prompt | groq_llm | StrOutputParser()
         raw = chain.invoke(inputs)

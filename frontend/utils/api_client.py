@@ -36,10 +36,18 @@ def _handle_response(resp: requests.Response) -> Optional[dict]:
         return None
     else:
         try:
-            detail = resp.json().get("detail", "Unknown error")
+            js = resp.json()
+            if isinstance(js, dict):
+                detail = js.get("detail", str(js))
+            else:
+                detail = str(js)
         except Exception:
             detail = resp.text
-        st.error(f"API Error: {detail}")
+            
+        if not detail or detail.isspace():
+            detail = f"Empty response body (HTTP {resp.status_code})"
+            
+        st.error(f"API Error ({resp.status_code}): {detail}")
         return None
 
 

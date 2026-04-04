@@ -12,7 +12,7 @@ from backend.config import settings
 logger = logging.getLogger(__name__)
 
 # Gemini quota/rate-limit error codes and messages to detect
-_QUOTA_SIGNALS = ("429", "RESOURCE_EXHAUSTED", "quota", "rate limit", "rateLimitExceeded")
+_QUOTA_SIGNALS = ("429", "RESOURCE_EXHAUSTED", "quota", "rate limit", "rateLimitExceeded", "api key expired", "api_key_invalid")
 
 
 def is_quota_error(error: Exception) -> bool:

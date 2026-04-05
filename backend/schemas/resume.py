@@ -98,6 +98,9 @@ class CoverLetterRequest(BaseModel):
 
 
 class CoverLetterResponse(BaseModel):
-    content: str
+    content: Any
     tone: str
     word_count: int
+
+class CoverLetterDownloadRequest(BaseModel):
+    content: Dict[str, Any]

@@ -894,6 +894,21 @@ def show_resume_analyzer():
                 st.info(result["overall_feedback"])
 
 
+def download_cover_letter_local(content: dict, fmt: str):
+    """Local fallback to bypass module caching issues."""
+    import requests
+    from frontend.utils.api_client import BASE_URL, _headers
+    resp = requests.post(
+        f"{BASE_URL}/api/cover-letter/download/{fmt}",
+        json={"content": content},
+        headers=_headers(),
+        timeout=30,
+    )
+    if resp.status_code == 200:
+        return resp.content
+    return None
+
+
 def show_cover_letter():
     st.markdown('<h1 class="main-header">✉️ Cover Letter Generator</h1>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Generate personalized cover letters with the perfect tone</p>', unsafe_allow_html=True)
@@ -917,6 +932,8 @@ def show_cover_letter():
                     result = api.generate_cover_letter(company, role, jd, skills_list, tone, context)
                     if result:
                         st.session_state["cover_letter"] = result
+                        st.session_state.pop("cl_pdf", None)
+                        st.session_state.pop("cl_docx", None)
 
     with col2:
         st.markdown("### Preview")
@@ -924,8 +941,58 @@ def show_cover_letter():
             cl = st.session_state["cover_letter"]
             st.markdown(f"**Tone:** {cl.get('tone', '')} | **Words:** {cl.get('word_count', 0)}")
             st.markdown("---")
-            st.markdown(cl.get("content", ""))
-            st.code(cl.get("content", ""), language=None)
+            
+            content = cl.get("content", {})
+            if isinstance(content, str):
+                st.markdown(content)
+            else:
+                if "cl_pdf" not in st.session_state:
+                    with st.spinner("Rendering PDF preview..."):
+                        res = download_cover_letter_local(content, "pdf")
+                        if res:
+                            st.session_state["cl_pdf"] = res
+                        
+                pdf_data = st.session_state.get("cl_pdf")
+                
+                if pdf_data:
+                    import base64
+                    is_html = pdf_data.strip().startswith(b"<!DOCTYPE") or pdf_data.strip().startswith(b"<html")
+                    if is_html:
+                        st.info("ℹ️ Showing high-fidelity HTML preview.")
+                        b64_html = base64.b64encode(pdf_data).decode("utf-8")
+                        st.markdown(
+                            f'<iframe src="data:text/html;base64,{b64_html}" width="100%" height="600px" style="border: 1px solid rgba(108, 99, 255, 0.3); border-radius: 8px; background: white;"></iframe>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        b64_pdf = base64.b64encode(pdf_data).decode("utf-8")
+                        st.markdown(
+                            f'<iframe src="data:application/pdf;base64,{b64_pdf}" width="100%" height="600px" style="border: 1px solid rgba(108, 99, 255, 0.3); border-radius: 8px;"></iframe>',
+                            unsafe_allow_html=True,
+                        )
+                
+                st.markdown("### 📥 Download Cover Letter")
+                dc1, dc2 = st.columns(2)
+                with dc1:
+                    if pdf_data:
+                        ext = "html" if is_html else "pdf"
+                        mime = "text/html" if is_html else "application/pdf"
+                        st.download_button(
+                            f"📥 Download {ext.upper()}", pdf_data,
+                            f"CoverLetter.{ext}", mime,
+                            key="dl_cl_pdf", type="primary", use_container_width=True
+                        )
+                with dc2:
+                    if "cl_docx" not in st.session_state:
+                        st.session_state["cl_docx"] = download_cover_letter_local(content, "docx")
+                    docx_data = st.session_state.get("cl_docx")
+                    if docx_data:
+                        st.download_button(
+                            "📥 Download DOCX", docx_data,
+                            "CoverLetter.docx",
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            key="dl_cl_docx", use_container_width=True
+                        )
 
 
 def show_job_tracker():

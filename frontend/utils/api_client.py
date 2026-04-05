@@ -202,6 +202,20 @@ def generate_cover_letter(
     )
     return _handle_response(resp)
 
+print("--- api_client.py loaded ---")
+
+def download_cover_letter(content: dict, fmt: str) -> Optional[bytes]:
+    """Download a cover letter in a specific format."""
+    resp = requests.post(
+        f"{BASE_URL}/api/cover-letter/download/{fmt}",
+        json={"content": content},
+        headers=_headers(),
+        timeout=30,
+    )
+    if resp.status_code == 200:
+        return resp.content
+    return None
+
 
 # --- Applications ---
 def create_application(data: dict) -> Optional[dict]:

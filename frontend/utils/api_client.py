@@ -368,3 +368,68 @@ def extract_jd(text: str = None, url: str = None) -> Optional[dict]:
 def get_analytics() -> Optional[dict]:
     resp = requests.get(f"{BASE_URL}/api/analytics/summary", headers=_headers(), timeout=_TIMEOUT_SHORT)
     return _handle_response(resp)
+
+
+# --- Auto Apply Agent ---
+def get_auto_apply_status() -> Optional[dict]:
+    """Check agent capabilities (playwright available, supported platforms, etc.)."""
+    try:
+        resp = requests.get(f"{BASE_URL}/api/auto-apply/status", headers=_headers(), timeout=_TIMEOUT_SHORT)
+        return _handle_response(resp)
+    except Exception:
+        return None
+
+
+def parse_jd_for_apply(text: str = None, url: str = None, resume_skills: list = None) -> Optional[dict]:
+    """
+    Step 1: Parse a pasted JD or URL.
+    Returns structured JD data: company, role, required_skills, apply_url, application_fields, etc.
+    """
+    resp = requests.post(
+        f"{BASE_URL}/api/auto-apply/parse-jd",
+        json={
+            "text": text,
+            "url": url,
+            "resume_skills": resume_skills or [],
+        },
+        headers=_headers(),
+        timeout=_TIMEOUT_AI,
+    )
+    return _handle_response(resp)
+
+
+def generate_apply_answers(jd_data: dict, resume_content: dict, user_profile: dict = None) -> Optional[dict]:
+    """
+    Step 2: Generate AI-powered answers for every application field.
+    Returns answers dict with cover_note, why_company, salary, etc.
+    """
+    resp = requests.post(
+        f"{BASE_URL}/api/auto-apply/generate-answers",
+        json={
+            "jd_data": jd_data,
+            "resume_content": resume_content,
+            "user_profile": user_profile or {},
+        },
+        headers=_headers(),
+        timeout=_TIMEOUT_AI,
+    )
+    return _handle_response(resp)
+
+
+def submit_auto_application(jd_data: dict, answers: dict, resume_path: str = None) -> Optional[dict]:
+    """
+    Step 3: Submit the application.
+    - Local mode: Playwright browser automation
+    - Hosted mode: Returns AI prep mode with copy-ready answers
+    """
+    resp = requests.post(
+        f"{BASE_URL}/api/auto-apply/submit",
+        json={
+            "jd_data": jd_data,
+            "answers": answers,
+            "resume_path": resume_path,
+        },
+        headers=_headers(),
+        timeout=_TIMEOUT_AI,
+    )
+    return _handle_response(resp)

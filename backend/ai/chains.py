@@ -16,6 +16,7 @@ from backend.ai.prompts import (
     RESUME_GENERATION_PROMPT, RESUME_ANALYSIS_PROMPT, COVER_LETTER_PROMPT,
     RECRUITER_SIM_PROMPT, INTERVIEW_QUESTION_PROMPT, INTERVIEW_EVAL_PROMPT,
     SKILL_GAP_PROMPT, EMAIL_GENERATION_PROMPT, GITHUB_ANALYSIS_PROMPT, JD_EXTRACTION_PROMPT,
+    JD_FORM_PARSE_PROMPT, APPLICATION_ANSWERS_PROMPT,
 )
 from backend.utils.helpers import clean_ai_response, safe_json_parse
 
@@ -261,4 +262,45 @@ def extract_jd_info(jd_text: str, provider: Optional[str] = None) -> dict:
         JD_EXTRACTION_PROMPT,
         {"jd_text": jd_text},
         provider=provider, temperature=0.2, max_tokens=2048,
+    )
+
+
+def parse_jd_for_apply(jd_text: str, provider: Optional[str] = None) -> dict:
+    """Parse JD and extract structured apply info including form fields."""
+    return _invoke_json(
+        JD_FORM_PARSE_PROMPT,
+        {"jd_text": jd_text[:5000]},
+        provider=provider, temperature=0.2, max_tokens=4096,
+    )
+
+
+def generate_apply_answers(
+    company: str,
+    role: str,
+    requirements: str,
+    resume_summary: str,
+    full_name: str,
+    email: str,
+    phone: str,
+    linkedin: str,
+    github: str,
+    experience_years: str,
+    provider: Optional[str] = None,
+) -> dict:
+    """Generate personalized application answers for all form fields."""
+    return _invoke_json(
+        APPLICATION_ANSWERS_PROMPT,
+        {
+            "company": company,
+            "role": role,
+            "requirements": requirements,
+            "resume_summary": resume_summary,
+            "full_name": full_name,
+            "email": email,
+            "phone": phone,
+            "linkedin": linkedin,
+            "github": github,
+            "experience_years": experience_years,
+        },
+        provider=provider, temperature=0.6, max_tokens=2048,
     )

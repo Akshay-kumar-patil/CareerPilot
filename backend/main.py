@@ -66,6 +66,7 @@ def root():
             "interview": "/api/interview", "skills": "/api/skills",
             "analytics": "/api/analytics", "email": "/api/email",
             "github": "/api/github", "extract": "/api/extract",
+            "auto_apply": "/api/auto-apply",
             "ai_status": "/api/ai/status",
         },
     }
@@ -84,7 +85,7 @@ def ai_status():
 from backend.routers import (
     auth, resume, analyzer, cover_letter, applications,
     referrals, interview, skills, analytics, email_gen,
-    github_analyzer, extraction,
+    github_analyzer, extraction, auto_apply,
 )
 
 app.include_router(auth.router)
@@ -99,5 +100,6 @@ app.include_router(analytics.router)
 app.include_router(email_gen.router)
 app.include_router(github_analyzer.router)
 app.include_router(extraction.router)
+app.include_router(auto_apply.router)
 
 logger.info(f"Registered {len(app.routes)} routes")

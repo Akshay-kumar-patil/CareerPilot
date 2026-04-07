@@ -338,3 +338,94 @@ Return ONLY valid JSON:
     "job_type": "<remote/hybrid/onsite or null>"
 }}
 """
+
+
+JD_FORM_PARSE_PROMPT = """You are an expert job application assistant.
+
+Analyze the following job description and extract every detail needed to apply for this job.
+
+**Job Description / URL Content:**
+{jd_text}
+
+Return ONLY valid JSON — no markdown, no explanation:
+{{
+    "company": "<company name>",
+    "role": "<exact job title>",
+    "location": "<city/remote/hybrid>",
+    "job_type": "<full-time/part-time/contract/internship>",
+    "experience_required": "<e.g. 2-4 years or fresher>",
+    "salary_range": "<if mentioned, else null>",
+    "apply_url": "<direct application URL if found, else null>",
+    "apply_platform": "<LinkedIn/Naukri/Indeed/Company Website/Other>",
+    "required_skills": ["skill1", "skill2", "skill3"],
+    "preferred_skills": ["skill1", "skill2"],
+    "responsibilities": ["<responsibility under 15 words>"],
+    "application_fields": [
+        {{"field": "full_name", "label": "Full Name", "type": "text", "required": true}},
+        {{"field": "email", "label": "Email Address", "type": "email", "required": true}},
+        {{"field": "phone", "label": "Phone Number", "type": "text", "required": true}},
+        {{"field": "linkedin", "label": "LinkedIn Profile", "type": "url", "required": false}},
+        {{"field": "cover_note", "label": "Cover Note / Message", "type": "textarea", "required": true}},
+        {{"field": "experience_years", "label": "Years of Experience", "type": "number", "required": true}},
+        {{"field": "current_salary", "label": "Current CTC (LPA)", "type": "text", "required": false}},
+        {{"field": "expected_salary", "label": "Expected CTC (LPA)", "type": "text", "required": false}},
+        {{"field": "notice_period", "label": "Notice Period", "type": "text", "required": false}},
+        {{"field": "why_company", "label": "Why do you want to join us?", "type": "textarea", "required": false}},
+        {{"field": "portfolio", "label": "Portfolio / GitHub URL", "type": "url", "required": false}},
+        {{"field": "resume", "label": "Resume Upload", "type": "file", "required": true}}
+    ],
+    "key_highlights": ["<important detail about this job under 12 words>"]
+}}
+
+Rules:
+- application_fields: include ONLY fields commonly required for this type of role/platform
+- required_skills: focus on technical skills mentioned explicitly
+- Return valid JSON only
+"""
+
+
+APPLICATION_ANSWERS_PROMPT = """You are an expert job application writer helping a candidate apply for a job.
+
+Generate personalized, compelling answers for each application field based on the resume and job description.
+
+**Job Details:**
+Company: {company}
+Role: {role}
+Key Requirements: {requirements}
+
+**Candidate Resume Summary:**
+{resume_summary}
+
+**Candidate Contact Info:**
+Name: {full_name}
+Email: {email}
+Phone: {phone}
+LinkedIn: {linkedin}
+GitHub: {github}
+Experience: {experience_years} years
+
+Generate answers for ALL these fields. Return ONLY valid JSON:
+{{
+    "full_name": "{full_name}",
+    "email": "{email}",
+    "phone": "{phone}",
+    "linkedin": "{linkedin}",
+    "portfolio": "{github}",
+    "experience_years": "{experience_years}",
+    "current_salary": "<realistic estimate based on experience, e.g. 6 LPA>",
+    "expected_salary": "<reasonable ask with 20-30% hike>",
+    "notice_period": "<15 days / 30 days / Immediate / as appropriate>",
+    "cover_note": "<3-4 sentence compelling cover note tailored to this specific role and company. Reference specific skills/projects from resume that match the JD. Keep under 100 words.>",
+    "why_company": "<2-3 sentence genuine answer about why this company. Reference company's product/domain. Keep under 60 words.>",
+    "headline": "<One-line professional headline, e.g. Full Stack Developer | React & Node.js | 2 YOE>",
+    "availability": "Immediately available",
+    "referral": "",
+    "additional_info": "<Any additional strong selling point about the candidate under 30 words>"
+}}
+
+IMPORTANT:
+- cover_note MUST reference the company name ({company}) and role ({role}) specifically
+- Mention at least 2 specific skills/technologies from the resume that match the JD
+- Keep all text professional, concise, and human-sounding — not generic
+- Return ONLY valid JSON, no markdown wrapper
+"""

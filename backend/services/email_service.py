@@ -1,4 +1,3 @@
-"""Email generation service."""
 from backend.services.ai_service import ai_service
 
 

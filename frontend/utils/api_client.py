@@ -97,12 +97,15 @@ def generate_resume(
     existing_resume: str = "",
     template_id: int = None,
     additional_context: str = "",
+    resume_data: dict = None,
 ) -> Optional[dict]:
     payload = {
         "job_description": job_description,
         "existing_resume": existing_resume,
         "additional_context": additional_context,
     }
+    if resume_data:
+        payload["resume_data"] = resume_data
     if template_id:
         payload["template_id"] = template_id
     resp = requests.post(

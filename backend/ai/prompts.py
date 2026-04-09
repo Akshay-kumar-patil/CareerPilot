@@ -5,7 +5,7 @@ Each prompt is designed for structured JSON output where possible.
 
 RESUME_GENERATION_PROMPT = """You are an expert resume writer specializing in ATS-optimized developer resumes.
 
-Given the following job description and user information, generate a professional, ATS-optimized resume.
+Given the following job description and user information, generate a professional, ATS-optimized resume. 
 Your goal is to create a resume that looks like a top-tier developer resume with strong formatting.
 
 **Job Description:**
@@ -17,9 +17,15 @@ Your goal is to create a resume that looks like a top-tier developer resume with
 **Additional Context:**
 {additional_context}
 
-Generate a complete resume in the following JSON format. Every field must be present.
-If a field has no data, use an empty string "" or empty array [].
-Do NOT omit any field. Do NOT add extra text outside the JSON.
+Generate a complete resume in the following JSON format.
+STRICT RULES — failure to follow will break the parser:
+- Return ONLY valid JSON. No text before or after.
+- Every bullet point: MAX 20 words.
+- Every array (experience, projects, etc.): MAX 3 items.
+- Summary: MAX 50 words.
+- Do NOT truncate — if you are running out of space, shorten values further.
+- Close ALL brackets and quotes.
+- Preserve the user's ACTUAL NAME and contact details from the input.
 
 {{
     "full_name": "First Last",
@@ -32,69 +38,65 @@ Do NOT omit any field. Do NOT add extra text outside the JSON.
         "location": "City, State",
         "leetcode": "leetcode.com/username"
     }},
-    "summary": "A 2-3 sentence professional summary. Mention expertise areas, years of experience, and key strengths relevant to the target role.",
+    "summary": "A 2-3 sentence professional summary focused on key strengths.",
     "education": [
         {{
-            "degree": "Bachelor of Technology — Computer Science",
+            "degree": "Degree Name",
             "school": "University Name",
             "location": "City, State",
-            "dates": "2020-2024",
-            "grade": "CGPA: 8.5",
+            "dates": "Year-Year",
+            "grade": "CGPA/Percentage",
             "highlights": []
         }}
     ],
     "skills": {{
-        "Programming & Databases": "Python, JavaScript, Java, C/C++, SQL, MySQL, PostgreSQL, MongoDB, Firebase, Redis",
-        "Frameworks & Libraries": "React.js, React Native, Node.js, Express.js, FastAPI, HTML5, CSS3, Three.js",
-        "Cloud, DevOps & Tools": "AWS, Google Cloud Platform, Docker, Git, CI/CD, VS Code, Socket.io, MQTT"
+        "Programming & Databases": "Python, JavaScript, SQL",
+        "Frameworks & Libraries": "React.js, Node.js, FastAPI",
+        "Cloud & Tools": "AWS, Docker, Git"
     }},
     "experience": [
         {{
-            "title": "Full Stack Developer",
+            "title": "Role Name",
             "company": "Company Name",
-            "location": "Remote",
-            "dates": "Jan 2024 — Present",
+            "location": "City",
+            "dates": "Month Year — Present",
             "bullets": [
-                "Developed X feature using Y technology, resulting in Z% improvement",
-                "Built customer-facing APIs serving 10K+ requests/day",
-                "Led team of N engineers implementing agile processes"
+                "Developed X feature using Y technology, improving Z by N%",
+                "Built scalable APIs serving thousands of users daily"
             ]
         }}
     ],
     "projects": [
         {{
             "name": "Project Name",
-            "tech_stack": "React, Node.js, MongoDB",
-            "live_url": "project-live-url.com",
+            "tech_stack": "Tech A, Tech B",
+            "live_url": "url.com",
             "repo_url": "github.com/user/repo",
             "bullets": [
                 "Built full-stack application with real-time features",
-                "Reduced latency by 40% through optimization"
+                "Optimized performance reducing latency by 40%"
             ]
         }}
     ],
     "certifications": [
         {{
-            "name": "AWS Cloud Practitioner",
-            "issuer": "Amazon Web Services",
-            "date": "2024"
+            "name": "Cert Name",
+            "issuer": "Issuer",
+            "date": "Year"
         }}
     ],
     "achievements": [
-        "Won 1st place in XYZ Hackathon 2024",
-        "3-Time College Topper on Code360 Leaderboard"
+        "Concise achievement point",
+        "Another key achievement"
     ]
 }}
 
 CRITICAL RULES:
-1. Use strong action verbs (Led, Developed, Implemented, Optimized, Engineered, Built)
-2. Include quantifiable metrics wherever possible (%, numbers, scale)
-3. Match keywords from the job description naturally into experience and skills
-4. Keep bullet points concise (1-2 lines each, under 20 words)
-5. For skills, use comma-separated strings grouped by category
-6. Return ONLY valid JSON — no markdown fences, no explanation text before or after
-7. Preserve the user's actual data (name, contact, education, etc.) — do NOT invent personal details
-8. Enhance and optimize bullet points for ATS but keep them truthful
+1. Use strong action verbs (Led, Developed, Implemented, Optimized, Engineered, Built).
+2. Include quantifiable metrics wherever possible (%, numbers, scale).
+3. Match keywords from the job description naturally into experience and skills.
+4. Return ONLY valid JSON — no markdown fences, no explanation text.
+5. Preserve the user's actual data (name, contact, education, etc.) — do NOT invent personal details.
 """
 
 
@@ -338,3 +340,75 @@ Return ONLY valid JSON:
     "job_type": "<remote/hybrid/onsite or null>"
 }}
 """
+
+JD_FORM_PARSE_PROMPT = """You are an expert job application assistant. Parse the following job description and extract everything needed to fill a job application form.
+
+**Job Description:**
+{jd_text}
+
+Return ONLY valid JSON (no markdown, no explanation):
+{{
+    "company": "<company name>",
+    "role": "<exact job title>",
+    "location": "<city/state/country or Remote>",
+    "job_type": "<Full-time/Part-time/Contract/Internship>",
+    "experience_required": "<e.g. 2-4 years>",
+    "salary_range": "<e.g. 8-15 LPA or null>",
+    "apply_platform": "<LinkedIn/Naukri/Indeed/Company Website/AngelList/Other>",
+    "apply_url": "<direct application URL if found, else null>",
+    "required_skills": ["<required skill>"],
+    "preferred_skills": ["<preferred/nice-to-have skill>"],
+    "responsibilities": ["<key responsibility in 10 words max>"],
+    "key_highlights": ["<standout perk or highlight>"],
+    "application_fields": [
+        {{"field": "full_name", "label": "Full Name", "type": "text", "required": true}},
+        {{"field": "email", "label": "Email Address", "type": "email", "required": true}},
+        {{"field": "phone", "label": "Phone Number", "type": "text", "required": true}},
+        {{"field": "linkedin", "label": "LinkedIn Profile", "type": "url", "required": false}},
+        {{"field": "cover_note", "label": "Cover Note", "type": "textarea", "required": true}},
+        {{"field": "experience_years", "label": "Years of Experience", "type": "number", "required": true}},
+        {{"field": "expected_salary", "label": "Expected CTC (LPA)", "type": "text", "required": false}},
+        {{"field": "notice_period", "label": "Notice Period", "type": "text", "required": false}},
+        {{"field": "why_company", "label": "Why join us?", "type": "textarea", "required": false}},
+        {{"field": "portfolio", "label": "Portfolio / GitHub", "type": "url", "required": false}},
+        {{"field": "resume", "label": "Resume Upload", "type": "file", "required": true}}
+    ]
+}}
+"""
+
+APPLICATION_ANSWERS_PROMPT = """You are a professional job application coach. Generate personalized, ATS-optimized answers for a job application form.
+
+**Applying to:** {company} — {role}
+**Key Requirements:** {requirements}
+
+**Candidate Resume Summary:**
+{resume_summary}
+
+**Candidate Details:**
+- Name: {full_name}
+- Email: {email}
+- Phone: {phone}
+- LinkedIn: {linkedin}
+- GitHub/Portfolio: {github}
+- Years of Experience: {experience_years}
+
+Generate highly compelling, genuine answers for the application. Return ONLY valid JSON:
+{{
+    "full_name": "{full_name}",
+    "email": "{email}",
+    "phone": "{phone}",
+    "linkedin": "{linkedin}",
+    "portfolio": "{github}",
+    "headline": "<professional headline: Role | Key Skills | Years exp>",
+    "experience_years": "{experience_years}",
+    "current_salary": "<reasonable estimate based on exp, say 'Prefer not to disclose' if unsure>",
+    "expected_salary": "<reasonable ask, e.g. '10-12 LPA' based on role & market>",
+    "notice_period": "<e.g. '30 days' or 'Immediately available'>",
+    "availability": "<e.g. 'Immediately available' or '2 weeks notice period'>",
+    "cover_note": "<3-4 compelling sentences tailored to {company} and {role}. Mention 1-2 specific skills matching the requirements. End with enthusiasm.>",
+    "why_company": "<2-3 genuine sentences about why {company} specifically. Research-style — mention their product/mission/growth angle.>",
+    "additional_info": "<Any strong differentiator: open source contributions, side projects, certifications relevant to this role>",
+    "referral": ""
+}}
+"""
+

@@ -3,8 +3,9 @@ LangChain chain definitions for all AI features.
 Uses LCEL (LangChain Expression Language) for composable pipelines.
 
 Quota handling strategy:
-- Try primary provider (Gemini by default)
-- If 429 / RESOURCE_EXHAUSTED → mark router quota flag → immediately try Groq (llama-3.3-70b-versatile)
+- Try primary provider (Groq by default when no Gemini key; Gemini if key is set)
+- If 429 / RESOURCE_EXHAUSTED (Gemini) → mark router quota flag → immediately try Groq
+- If Groq is primary and fails → surface clear error to user
 - No retries — one attempt per provider, fail fast and fall through
 """
 import logging
@@ -16,10 +17,26 @@ from backend.ai.prompts import (
     RESUME_GENERATION_PROMPT, RESUME_ANALYSIS_PROMPT, COVER_LETTER_PROMPT,
     RECRUITER_SIM_PROMPT, INTERVIEW_QUESTION_PROMPT, INTERVIEW_EVAL_PROMPT,
     SKILL_GAP_PROMPT, EMAIL_GENERATION_PROMPT, GITHUB_ANALYSIS_PROMPT, JD_EXTRACTION_PROMPT,
+    JD_FORM_PARSE_PROMPT, APPLICATION_ANSWERS_PROMPT,
 )
 from backend.utils.helpers import clean_ai_response, safe_json_parse
 
 logger = logging.getLogger(__name__)
+
+# Max chars for context inputs to prevent token overflow on Groq (32k ctx window)
+_MAX_CONTEXT_CHARS = 6000
+
+
+def _truncate_inputs(inputs: dict) -> dict:
+    """Truncate large free-text inputs so we don't blow Groq's context window."""
+    truncatable = {"existing_resume", "resume_text", "jd_text", "repos_data"}
+    result = dict(inputs)
+    for key in truncatable:
+        if key in result and isinstance(result[key], str) and len(result[key]) > _MAX_CONTEXT_CHARS:
+            original_len = len(result[key])
+            result[key] = result[key][:_MAX_CONTEXT_CHARS] + "\n[...content truncated for context window...]"
+            logger.info(f"Truncated '{key}' from {original_len} to {_MAX_CONTEXT_CHARS} chars")
+    return result
 
 
 def _invoke(
@@ -33,39 +50,48 @@ def _invoke(
     Core invoke function — single attempt with clean Groq fallback on quota error.
 
     Flow:
-      1. Try primary provider (e.g. Gemini)
-      2. If quota error → mark exhausted on router → try Groq once
-      3. Any other error → raise immediately (no silent swallowing)
+      1. Truncate large context inputs to prevent token overflow
+      2. Try primary provider (Groq when no Gemini key, or Gemini if key is set)
+      3. If Gemini quota error → mark exhausted on router → try Groq once
+      4. Any other error → raise immediately (no silent swallowing)
 
     Returns cleaned raw string from the LLM.
     """
     prompt = ChatPromptTemplate.from_template(prompt_template)
+    inputs = _truncate_inputs(inputs)
 
     # Primary attempt
     try:
         llm, used_provider = model_router.get_llm_with_fallback(
             provider=provider, temperature=temperature, max_tokens=max_tokens
         )
+        print(f"[AI] Invoking {used_provider}... (Input keys: {list(inputs.keys())})")
         chain = prompt | llm | StrOutputParser()
         raw = chain.invoke(inputs)
+        print(f"[AI] {used_provider} returned {len(raw)} chars.")
+        
+        cleaned = clean_ai_response(raw)
         logger.info(f"LLM call succeeded via {used_provider}. Response length: {len(raw)}")
-        return clean_ai_response(raw)
+        return cleaned
 
     except Exception as primary_err:
         if is_quota_error(primary_err):
             # Gemini quota hit — mark it and fall through to Groq
+            print(f"[AI] Primary {provider or 'default'} quota hit! Falling back...")
             logger.warning(f"Gemini quota/rate-limit error: {primary_err}")
             model_router.mark_gemini_quota_exhausted()
         else:
             # Non-quota error (bad request, network, etc.) — don't hide it
+            print(f"[AI] Primary call failed (ERROR): {str(primary_err)[:100]}...")
             logger.error(f"Primary LLM call failed (non-quota): {primary_err}")
             raise
 
     # Groq fallback — only reached after a quota error
-    logger.info("Falling back to Groq (llama-3.3-70b-versatile) after Gemini quota exhaustion...")
+    print("[AI] Attempting Groq fallback...")
     try:
         from backend.config import settings
         if not settings.GROQ_API_KEY:
+            print("[AI] Fallback failed: No GROQ_API_KEY found.")
             raise ValueError(
                 "Gemini API key is expired or exhausted, and Groq fallback is unavailable "
                 "because GROQ_API_KEY is not set. Please update your AI API keys."
@@ -74,7 +100,7 @@ def _invoke(
         groq_llm = model_router.get_llm(provider="groq", temperature=temperature, max_tokens=max_tokens)
         chain = prompt | groq_llm | StrOutputParser()
         raw = chain.invoke(inputs)
-        logger.info(f"Groq fallback succeeded. Response length: {len(raw)}")
+        print(f"[AI] Groq fallback success! Returned {len(raw)} chars.")
         return clean_ai_response(raw)
     except Exception as groq_err:
         logger.error(f"Groq fallback also failed: {groq_err}")
@@ -99,10 +125,36 @@ def _invoke_json(
         raw = _invoke(prompt_template, inputs, provider=provider,
                       temperature=temperature, max_tokens=max_tokens)
         parsed = safe_json_parse(raw)
-        if parsed and "error" not in parsed:
+        
+        if not parsed or not isinstance(parsed, dict):
+            logger.error(f"JSON parse failed or not a dict. Raw preview: {raw[:300]}")
+            return {"error": "Failed to parse AI response as JSON", "raw_preview": raw[:200]}
+            
+        if "error" in parsed:
             return parsed
-        logger.error(f"JSON parse failed. Raw preview: {raw[:300]}")
-        return {"error": "Failed to parse AI response as JSON", "raw_preview": raw[:200]}
+
+        # --- Dynamic Normalization & Validation ---
+        # For resume generation, ensure critical fields exist to prevent rendering crashes
+        if "full_name" in prompt_template.lower() and "contact" in prompt_template.lower():
+            # Ensure all sections are present
+            sections = ["education", "experience", "projects", "certifications", "achievements"]
+            for section in sections:
+                if section not in parsed or not isinstance(parsed[section], list):
+                    parsed[section] = []
+            
+            # Ensure complex objects are present
+            if "skills" not in parsed or not isinstance(parsed["skills"], dict):
+                parsed["skills"] = {}
+            if "contact" not in parsed or not isinstance(parsed["contact"], dict):
+                parsed["contact"] = {}
+                
+            # String fields
+            if "summary" not in parsed:
+                parsed["summary"] = ""
+            if "full_name" not in parsed:
+                parsed["full_name"] = "First Last"
+
+        return parsed
 
     except Exception as e:
         logger.error(f"_invoke_json failed: {e}")

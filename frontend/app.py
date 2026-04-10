@@ -239,7 +239,7 @@ def delete_resume_local(resume_id: int):
     return resp.status_code == 200
 
 
-def _render_generated_resume_display():
+def _render_generated_resume_display(key_suffix: str = ""):
     """Helper to render the generated resume preview and download buttons."""
     if "last_resume" in st.session_state:
         r = st.session_state["last_resume"]
@@ -327,7 +327,7 @@ def _render_generated_resume_display():
                     st.download_button(
                         f"📥 Download {ext.upper()}", pdf_data,
                         f"Resume_{resume_id}.{ext}", mime,
-                        key=f"dl_pdf_gen_helper_{resume_id}", type="primary", use_container_width=True
+                        key=f"dl_pdf_gen_helper_{resume_id}_{key_suffix}", type="primary", use_container_width=True
                     )
             with dc2:
                 docx_key = f"docx_{resume_id}"
@@ -339,7 +339,7 @@ def _render_generated_resume_display():
                         "📥 Download DOCX", data_docx,
                         f"Resume_{resume_id}.docx",
                         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        key=f"dl_docx_gen_helper_{resume_id}", use_container_width=True
+                        key=f"dl_docx_gen_helper_{resume_id}_{key_suffix}", use_container_width=True
                     )
 
         st.success(f"✅ Resume generated successfully! ATS Score: {ats_score}/100")
@@ -617,7 +617,7 @@ def show_resume_builder():
                         st.balloons()
 
             # ── Display Result in Smart Import ──
-            _render_generated_resume_display()
+            _render_generated_resume_display(key_suffix="smart")
 
     with tab1:
         st.info("💡 Fill in your details below. The AI agent will analyze your data and generate a professional developer resume matching top-tier formats.")
@@ -858,7 +858,7 @@ def show_resume_builder():
                                     st.session_state.pop(k, None)
 
             # ── Display Generated Resume ──
-            _render_generated_resume_display()
+            _render_generated_resume_display(key_suffix="new")
 
     with tab2:
         resumes = api.list_resumes()

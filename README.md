@@ -25,8 +25,9 @@ An AI-powered career operating system that automates the entire job search lifec
 
 **Hybrid Multi-Model System** with automatic fallback:
 
-- ☁️ **OpenAI GPT** — Cloud-based, high quality
-- 🏠 **Ollama (LLaMA/Mistral)** — Local, offline, private
+- ☁️ **Google Gemini** — Primary cloud AI, fast & generous free tier
+- ⚡ **Groq (llama-3.3-70b-versatile)** — Ultra-fast fallback, free tier
+- ☁️ **OpenAI GPT** — Optional cloud-based alternative
 - 🔄 **Auto-routing** — Detects connectivity and routes to best available model
 - 💰 **Cost tracking** — Monitor API usage and costs
 
@@ -34,7 +35,7 @@ An AI-powered career operating system that automates the entire job search lifec
 
 - **Backend:** FastAPI + SQLAlchemy + SQLite
 - **Frontend:** Streamlit (dark theme, modern UI)
-- **AI:** LangChain + OpenAI + Ollama
+- **AI:** LangChain + Google Gemini + Groq (llama-3.3-70b)
 - **Vector DB:** ChromaDB (semantic search)
 - **Embeddings:** sentence-transformers (offline)
 - **File Gen:** WeasyPrint (PDF), python-docx (DOCX)
@@ -44,7 +45,8 @@ An AI-powered career operating system that automates the entire job search lifec
 ### 1. Prerequisites
 
 - Python 3.10+
-- (Optional) [Ollama](https://ollama.ai) for offline AI
+- Gemini API key (free at https://aistudio.google.com)
+- (Optional) Groq API key (free at https://console.groq.com) for ultra-fast fallback
 - (Optional) OpenAI API key for cloud AI
 
 ### 2. Setup

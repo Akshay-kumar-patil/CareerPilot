@@ -25,7 +25,7 @@ class Settings(BaseSettings):
 
     # MongoDB
     MONGODB_URL: str = "mongodb://localhost:27017/"
-    MONGODB_DB_NAME: str = "career"
+    MONGODB_DB_NAME: str = "users"
 
     # Google OAuth
     GOOGLE_CLIENT_ID: Optional[str] = None

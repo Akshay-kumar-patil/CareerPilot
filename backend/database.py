@@ -70,11 +70,11 @@ def get_mongo_db():
 
 
 def get_users_collection():
-    """Return the career.users collection, or None if Mongo is unavailable."""
+    """Return the authentication collection, or None if Mongo is unavailable."""
     db = _init_mongo()
     if not db:
         return None
-    return db["users"]
+    return db["authentication"]
 
 
 # ─── ChromaDB ─────────────────────────────────────────────────────────────

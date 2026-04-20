@@ -23,6 +23,16 @@ class Settings(BaseSettings):
     DATABASE_URL: str = f"sqlite:///{BASE_DIR / 'data' / 'career_platform.db'}"
     CHROMA_PERSIST_DIR: str = str(BASE_DIR / "data" / "chroma_db")
 
+    # MongoDB
+    MONGODB_URL: str = "mongodb://localhost:27017/"
+    MONGODB_DB_NAME: str = "career"
+
+    # Google OAuth
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/auth/google/callback"
+    FRONTEND_URL: str = "http://localhost:8501"
+
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_MODEL: str = "gemini-2.5-flash"  # Updated to latest Gemini model
 

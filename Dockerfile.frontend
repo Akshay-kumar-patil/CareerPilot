@@ -21,7 +21,7 @@ COPY .env ./
 EXPOSE 8501
 
 # Set the backend API URL explicitly for this frontend container
-ENV API_BASE_URL="https://career-portal-m5re.onrender.com"
+ENV API_BASE_URL="https://career-portal-cxgd.onrender.com"
 
 # Start Streamlit securely
 # Using shell form to resolve the $PORT environment variable

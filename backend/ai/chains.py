@@ -23,8 +23,8 @@ from backend.utils.helpers import clean_ai_response, safe_json_parse
 
 logger = logging.getLogger(__name__)
 
-# Max chars for context inputs to prevent token overflow on Groq (32k ctx window)
-_MAX_CONTEXT_CHARS = 4000
+# Max chars for context inputs to prevent token overflow
+_MAX_CONTEXT_CHARS = 12000
 
 
 def _truncate_inputs(inputs: dict) -> dict:

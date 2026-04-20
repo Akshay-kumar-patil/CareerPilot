@@ -61,6 +61,20 @@ def register(email: str, password: str, full_name: str) -> Optional[dict]:
     return _handle_response(resp)
 
 
+def google_oauth_status():
+    """Check whether Google OAuth is configured on the backend."""
+    try:
+        resp = requests.get(f"{BASE_URL}/api/auth/google/status", timeout=5)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return None
+
+
+def get_google_login_url():
+    """Return the backend URL that starts the Google OAuth flow."""
+    return f"{BASE_URL}/api/auth/google"
 
 
 def login(email: str, password: str) -> Optional[dict]:

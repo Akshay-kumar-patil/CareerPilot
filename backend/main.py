@@ -84,6 +84,35 @@ def health_check():
     return {"status": "healthy", "version": settings.APP_VERSION}
 
 
+@app.get("/health/db")
+def db_health_check():
+    """Check MongoDB connectivity by running a ping command."""
+    from backend.database import _init_mongo
+    try:
+        mongo_db = _init_mongo()
+        if mongo_db and mongo_db is not False:
+            # Run a live ping to confirm connection is still alive
+            mongo_db.client.admin.command("ping")
+            return {
+                "mongodb": "connected",
+                "database": settings.MONGODB_DB_NAME,
+                "status": "ok",
+            }
+        else:
+            return {
+                "mongodb": "disconnected",
+                "database": settings.MONGODB_DB_NAME,
+                "status": "error",
+                "detail": "MongoDB client failed to initialize. Check MONGODB_URL in environment variables.",
+            }
+    except Exception as exc:
+        return {
+            "mongodb": "disconnected",
+            "status": "error",
+            "detail": str(exc),
+        }
+
+
 @app.get("/api/ai/status")
 def ai_status():
     return model_router.get_status()

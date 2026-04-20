@@ -185,7 +185,7 @@ def generate_resume(
             "existing_resume": existing_resume or "Not provided - generate from job description",
             "additional_context": additional_context or "None",
         },
-        provider=provider, temperature=0.6, max_tokens=4096,
+        provider=provider, temperature=0.6, max_tokens=8192,
     )
 
 
@@ -341,5 +341,5 @@ def smart_rebuild_resume(
         },
         provider=provider,
         temperature=0.5,
-        max_tokens=4096,
+        max_tokens=8192,
     )

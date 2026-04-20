@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 # Load .env file from the root directory with override so local .env takes precedence
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"), override=True)
 
-BASE_URL = os.environ.get("API_BASE_URL", "https://career-portal-m5re.onrender.com")
+BASE_URL = os.environ.get("API_BASE_URL", "https://career-portal-cxgd.onrender.com").rstrip("/")
 
 # FIX #9: Define standard timeouts as constants so they're consistent everywhere
 _TIMEOUT_SHORT = 10    # for simple read/write operations

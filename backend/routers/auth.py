@@ -1,26 +1,28 @@
-"""Authentication API routes — supports email/password and Google OAuth.
-
-Flow for Google OAuth:
-  1.  Frontend opens  GET /api/auth/google  in a new browser tab.
-  2.  Backend redirects the browser to Google's consent screen.
-  3.  Google redirects to  GET /api/auth/google/callback  with a one-time code.
-  4.  Backend exchanges the code for an ID-token, creates/finds the SQLite user,
-      syncs to MongoDB, generates a JWT, then redirects to the Streamlit frontend
-      with the token in the query-param ?auth_token=<jwt>.
-  5.  Streamlit's existing session-restore logic picks up auth_token automatically.
 """
-import json
+Authentication API routes — MongoDB-primary.
+
+Supports:
+  - POST /api/auth/register   → create user in MongoDB
+  - POST /api/auth/login      → verify credentials from MongoDB
+  - GET  /api/auth/me         → return current user profile
+  - PUT  /api/auth/profile    → update user profile in MongoDB
+  - GET  /api/auth/google     → redirect to Google OAuth
+  - GET  /api/auth/google/callback → handle Google OAuth callback
+  - GET  /api/auth/google/status   → check if Google OAuth is configured
+"""
 import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy.orm import Session
+from pymongo.errors import DuplicateKeyError
 
 from backend.config import settings
-from backend.database import get_db, get_users_collection
-from backend.models.user import User
-from backend.schemas.user import UserRegister, UserLogin, UserProfile, UserResponse, TokenResponse
+from backend.database import get_users_collection
+from backend.models.user import build_new_user_doc, user_doc_to_response
+from backend.schemas.user import (
+    UserRegister, UserLogin, UserProfile, UserResponse, TokenResponse,
+)
 from backend.utils.auth import (
     hash_password, verify_password, create_access_token, get_current_user,
 )
@@ -28,7 +30,8 @@ from backend.utils.auth import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
-# ─── Google OAuth client (authlib) ─────────────────────────────────────────
+
+# ─── Google OAuth client (authlib) ─────────────────────────────────────────────
 _oauth = None
 
 
@@ -56,120 +59,104 @@ def _get_oauth():
         return None
 
 
-# ─── MongoDB helper ─────────────────────────────────────────────────────────
-def _sync_user_to_mongo(user: User, provider: str = "local") -> None:
-    """Mirror a SQLite user record into MongoDB career.users collection."""
-    try:
-        col = get_users_collection()
-        if col is None:
-            return
-        doc = {
-            "sqlite_id": user.id,
-            "email": user.email,
-            "full_name": user.full_name,
-            "auth_provider": provider,
-            "phone": user.phone,
-            "linkedin_url": user.linkedin_url,
-            "github_username": user.github_username,
-            "portfolio_url": user.portfolio_url,
-            "skills": user.skills or [],
-            "experience_years": user.experience_years or 0,
-            "current_role": user.current_role,
-            "target_role": user.target_role,
-            "created_at": user.created_at or datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
-        }
-        col.update_one({"email": user.email}, {"$set": doc}, upsert=True)
-        logger.debug("User %s synced to MongoDB (provider=%s)", user.email, provider)
-    except Exception as exc:
-        # MongoDB sync failure must never break the auth flow
-        logger.warning("MongoDB sync failed for %s: %s", user.email, exc)
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+def _user_response(doc: dict) -> UserResponse:
+    """Convert a MongoDB doc to UserResponse."""
+    d = user_doc_to_response(doc)
+    return UserResponse(**d)
 
 
-# ─── Standard Email / Password Routes ───────────────────────────────────────
+# ─── Register ──────────────────────────────────────────────────────────────────
 
 @router.post("/register", response_model=TokenResponse)
-def register(data: UserRegister, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.email == data.email).first()
-    if existing:
+def register(data: UserRegister):
+    col = get_users_collection()
+    if col is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    # Check duplicate
+    if col.find_one({"email": data.email.strip().lower()}):
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    user = User(
-        email=data.email,
+    doc = build_new_user_doc(
+        email=data.email.strip().lower(),
         hashed_password=hash_password(data.password),
-        full_name=data.full_name,
+        full_name=data.full_name.strip(),
+        provider="local",
     )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
 
-    _sync_user_to_mongo(user, provider="local")
+    try:
+        result = col.insert_one(doc)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=400, detail="Email already registered")
 
-    token = create_access_token({"sub": str(user.id)})
+    doc["_id"] = result.inserted_id
+    token = create_access_token({"sub": str(result.inserted_id)})
+
+    logger.info("New user registered: %s", data.email)
     return TokenResponse(
         access_token=token,
-        user=UserResponse(
-            id=user.id, email=user.email, full_name=user.full_name,
-            created_at=user.created_at,
-        ),
+        user=_user_response(doc),
     )
 
+
+# ─── Login ─────────────────────────────────────────────────────────────────────
 
 @router.post("/login", response_model=TokenResponse)
-def login(data: UserLogin, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == data.email).first()
-    if not user or not verify_password(data.password, user.hashed_password or ""):
+def login(data: UserLogin):
+    col = get_users_collection()
+    if col is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    user_doc = col.find_one({"email": data.email.strip().lower()})
+    if not user_doc or not verify_password(data.password, user_doc.get("hashed_password", "")):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    _sync_user_to_mongo(user, provider="local")
+    token = create_access_token({"sub": str(user_doc["_id"])})
 
-    token = create_access_token({"sub": str(user.id)})
+    logger.info("User logged in: %s", data.email)
     return TokenResponse(
         access_token=token,
-        user=UserResponse(
-            id=user.id, email=user.email, full_name=user.full_name,
-            skills=user.skills or [],
-            experience_years=user.experience_years or 0,
-            current_role=user.current_role,
-            target_role=user.target_role,
-            created_at=user.created_at,
-        ),
+        user=_user_response(user_doc),
     )
 
+
+# ─── Get current user ──────────────────────────────────────────────────────────
 
 @router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)):
-    return UserResponse(
-        id=current_user.id,
-        email=current_user.email,
-        full_name=current_user.full_name,
-        skills=current_user.skills or [],
-        experience_years=current_user.experience_years or 0,
-        current_role=current_user.current_role,
-        target_role=current_user.target_role,
-        created_at=current_user.created_at,
-    )
+def get_me(current_user: dict = Depends(get_current_user)):
+    return _user_response(current_user)
 
+
+# ─── Update profile ────────────────────────────────────────────────────────────
 
 @router.put("/profile")
 def update_profile(
     data: UserProfile,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
+    col = get_users_collection()
+    if col is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
     updates = data.model_dump(exclude_none=True)
-    for key, value in updates.items():
-        if key in ("skills", "education", "work_experience", "projects"):
-            setattr(current_user, key, json.dumps(value) if isinstance(value, (list, dict)) else value)
-        else:
-            setattr(current_user, key, value)
-    db.commit()
-    db.refresh(current_user)
-    _sync_user_to_mongo(current_user, provider="local")
-    return {"message": "Profile updated", "user_id": current_user.id}
+    if not updates:
+        return {"message": "No changes provided"}
+
+    updates["updated_at"] = datetime.utcnow()
+
+    from bson import ObjectId
+    col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$set": updates},
+    )
+
+    logger.info("Profile updated for user: %s", current_user["email"])
+    return {"message": "Profile updated", "user_id": current_user["id"]}
 
 
-# ─── Google OAuth Routes ─────────────────────────────────────────────────────
+# ─── Google OAuth ──────────────────────────────────────────────────────────────
 
 @router.get("/google")
 async def google_login(request: Request):
@@ -178,15 +165,14 @@ async def google_login(request: Request):
     if oauth is None:
         raise HTTPException(
             status_code=503,
-            detail="Google OAuth is not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
+            detail="Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
         )
-    redirect_uri = settings.GOOGLE_REDIRECT_URI
-    return await oauth.google.authorize_redirect(request, redirect_uri)
+    return await oauth.google.authorize_redirect(request, settings.GOOGLE_REDIRECT_URI)
 
 
 @router.get("/google/callback")
-async def google_callback(request: Request, db: Session = Depends(get_db)):
-    """Handle the OAuth callback from Google, issue a JWT, redirect to frontend."""
+async def google_callback(request: Request):
+    """Handle Google OAuth callback, issue a JWT, redirect to frontend."""
     oauth = _get_oauth()
     if oauth is None:
         raise HTTPException(status_code=503, detail="Google OAuth is not configured.")
@@ -201,9 +187,8 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         )
 
     user_info = token_data.get("userinfo") or {}
-    email = user_info.get("email")
+    email = user_info.get("email", "").strip().lower()
     full_name = user_info.get("name", email)
-    google_id = user_info.get("sub")
 
     if not email:
         return RedirectResponse(
@@ -211,31 +196,26 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
             status_code=302,
         )
 
-    # Find or create the user in SQLite
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        user = User(
-            email=email,
-            hashed_password="",           # Google users have no local password
-            full_name=full_name or email,
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+    col = get_users_collection()
+    user_doc = col.find_one({"email": email})
+
+    if not user_doc:
+        # Create new user
+        doc = build_new_user_doc(email=email, hashed_password="", full_name=full_name, provider="google")
+        result = col.insert_one(doc)
+        doc["_id"] = result.inserted_id
+        user_doc = doc
         logger.info("New user created via Google OAuth: %s", email)
     else:
-        # Update name in case it changed on Google side
-        if full_name and user.full_name != full_name:
-            user.full_name = full_name
-            db.commit()
-            db.refresh(user)
+        # Update name if changed
+        if full_name and user_doc.get("full_name") != full_name:
+            col.update_one(
+                {"_id": user_doc["_id"]},
+                {"$set": {"full_name": full_name, "updated_at": datetime.utcnow()}},
+            )
+            user_doc["full_name"] = full_name
 
-    _sync_user_to_mongo(user, provider="google")
-
-    jwt_token = create_access_token({"sub": str(user.id)})
-
-    # Redirect back to Streamlit — existing _restore_from_query_params() will
-    # pick up auth_token automatically and log the user in without extra code.
+    jwt_token = create_access_token({"sub": str(user_doc["_id"])})
     redirect_url = f"{settings.FRONTEND_URL}/?auth_token={jwt_token}"
     return RedirectResponse(url=redirect_url, status_code=302)
 

@@ -1,54 +1,49 @@
-"""User model for authentication and profile storage."""
+"""
+MongoDB user document helper.
+Replaces the SQLAlchemy User model for all auth and profile operations.
+All persistence goes to the 'authentication' collection in MongoDB.
+"""
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Text, JSON
-from backend.database import Base
+from typing import Optional, List
+from bson import ObjectId
 
 
-class User(Base):
-    __tablename__ = "users"
+def user_doc_to_response(doc: dict) -> dict:
+    """Convert a MongoDB user document to a serialisable dict."""
+    if doc is None:
+        return None
+    doc = dict(doc)
+    doc["id"] = str(doc.pop("_id"))
+    # Ensure lists are never None
+    for field in ("skills", "education", "work_experience", "projects"):
+        if doc.get(field) is None:
+            doc[field] = []
+    doc.setdefault("experience_years", 0)
+    return doc
 
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String(255), unique=True, index=True, nullable=False)
-    hashed_password = Column(String(255), nullable=False)
-    full_name = Column(String(255), nullable=False)
-    phone = Column(String(50), nullable=True)
-    linkedin_url = Column(String(500), nullable=True)
-    github_username = Column(String(100), nullable=True)
-    portfolio_url = Column(String(500), nullable=True)
 
-    # FIX: JSON columns — SQLAlchemy handles serialization automatically.
-    # No more manual json.dumps/loads; setting user.skills = ["python"] just works.
-    skills = Column(JSON, default=list)
-    experience_years = Column(Integer, default=0)
-    current_role = Column(String(255), nullable=True)
-    target_role = Column(String(255), nullable=True)
-    education = Column(JSON, default=list)
-    work_experience = Column(JSON, default=list)
-    projects = Column(JSON, default=list)
-    summary = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    def get_skills_list(self):
-        return self.skills or []
-
-    def set_skills_list(self, skills_list):
-        self.skills = skills_list
-
-    def get_profile_dict(self):
-        return {
-            "full_name": self.full_name,
-            "email": self.email,
-            "phone": self.phone,
-            "linkedin_url": self.linkedin_url,
-            "github_username": self.github_username,
-            "portfolio_url": self.portfolio_url,
-            "skills": self.skills or [],
-            "experience_years": self.experience_years,
-            "current_role": self.current_role,
-            "target_role": self.target_role,
-            "education": self.education or [],
-            "work_experience": self.work_experience or [],
-            "projects": self.projects or [],
-            "summary": self.summary,
-        }
+def build_new_user_doc(email: str, hashed_password: str, full_name: str,
+                       provider: str = "local") -> dict:
+    """Return a dict ready to be inserted into the 'authentication' collection."""
+    now = datetime.utcnow()
+    return {
+        "email": email,
+        "hashed_password": hashed_password,
+        "full_name": full_name,
+        "auth_provider": provider,          # "local" | "google"
+        "phone": None,
+        "linkedin_url": None,
+        "github_username": None,
+        "portfolio_url": None,
+        "skills": [],
+        "experience_years": 0,
+        "current_role": None,
+        "target_role": None,
+        "education": [],
+        "work_experience": [],
+        "projects": [],
+        "summary": None,
+        "is_active": True,
+        "created_at": now,
+        "updated_at": now,
+    }

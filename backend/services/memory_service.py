@@ -1,27 +1,38 @@
 """Personal memory service — stores and retrieves user context for AI."""
 import json
-from sqlalchemy.orm import Session
-from backend.models.user import User
-from backend.models.resume import Resume
-from backend.models.application import Application
+from bson.errors import InvalidId
+from backend.database import get_users_collection, get_resumes_collection
+from backend.models.user import user_doc_to_response
 
+# Optional: keep for app history if apps are still in sqlite
+from sqlalchemy.orm import Session
+from backend.models.application import Application
 
 class MemoryService:
 
-    def get_user_context(self, db: Session, user_id: int) -> str:
+    def get_user_context(self, db: Session, user_id: str) -> str:
         """Assemble full user context for AI prompts."""
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
+        # 1. Fetch user from MongoDB
+        user_col = get_users_collection()
+        try:
+            from bson import ObjectId
+            user_doc = user_col.find_one({"_id": ObjectId(user_id)})
+        except InvalidId:
+            return "No user profile found."
+            
+        if not user_doc:
             return "No user profile found."
 
-        profile = user.get_profile_dict()
+        profile = user_doc_to_response(user_doc)
 
-        # Get latest resume
-        latest_resume = db.query(Resume).filter(
-            Resume.user_id == user_id, Resume.is_active == 1
-        ).order_by(Resume.created_at.desc()).first()
+        # 2. Get latest active resume from MongoDB
+        resume_col = get_resumes_collection()
+        latest_resume = resume_col.find_one(
+            {"user_id": user_id, "is_active": True},
+            sort=[("created_at", -1)]
+        )
 
-        # Get application stats
+        # 3. Get application stats from SQLite (legacy)
         apps = db.query(Application).filter(Application.user_id == user_id).all()
         app_stats = {
             "total": len(apps),
@@ -37,26 +48,23 @@ class MemoryService:
         ]
 
         if latest_resume:
-            context_parts.append(f"Latest Resume (v{latest_resume.version}): {latest_resume.raw_text[:1000]}")
+            raw_text = latest_resume.get("raw_text", "")
+            version = latest_resume.get("version", 1)
+            context_parts.append(f"Latest Resume (v{version}): {raw_text[:1000]}")
 
         return "\n\n".join(context_parts)
 
-    def update_profile(self, db: Session, user_id: int, updates: dict) -> User:
-        """Update user profile fields."""
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
+    def update_profile(self, user_id: str, updates: dict) -> dict:
+        """Update user profile fields in MongoDB."""
+        user_col = get_users_collection()
+        try:
+            from bson import ObjectId
+            user_col.update_one(
+                {"_id": ObjectId(user_id)},
+                {"$set": updates}
+            )
+            return user_doc_to_response(user_col.find_one({"_id": ObjectId(user_id)}))
+        except InvalidId:
             return None
-
-        for key, value in updates.items():
-            if hasattr(user, key):
-                if key in ("skills", "education", "work_experience", "projects"):
-                    setattr(user, key, json.dumps(value) if isinstance(value, (list, dict)) else value)
-                else:
-                    setattr(user, key, value)
-
-        db.commit()
-        db.refresh(user)
-        return user
-
 
 memory_service = MemoryService()

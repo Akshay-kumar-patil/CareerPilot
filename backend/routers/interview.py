@@ -1,8 +1,5 @@
 """Mock interview API routes."""
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from backend.database import get_db
-from backend.models.user import User
 from backend.schemas.ai import InterviewGenerateRequest, InterviewEvaluateRequest, InterviewResponse, InterviewEvaluation
 from backend.utils.auth import get_current_user
 from backend.services.interview_service import interview_service
@@ -11,7 +8,7 @@ router = APIRouter(prefix="/api/interview", tags=["Interview"])
 
 
 @router.post("/generate", response_model=InterviewResponse)
-def generate_questions(req: InterviewGenerateRequest, current_user: User = Depends(get_current_user)):
+def generate_questions(req: InterviewGenerateRequest, current_user: dict = Depends(get_current_user)):
     try:
         result = interview_service.generate_questions(
             role=req.role, company=req.company or "",
@@ -25,7 +22,7 @@ def generate_questions(req: InterviewGenerateRequest, current_user: User = Depen
 
 
 @router.post("/evaluate", response_model=InterviewEvaluation)
-def evaluate_answer(req: InterviewEvaluateRequest, current_user: User = Depends(get_current_user)):
+def evaluate_answer(req: InterviewEvaluateRequest, current_user: dict = Depends(get_current_user)):
     try:
         result = interview_service.evaluate_answer(req.question, req.answer, req.role)
         return InterviewEvaluation(

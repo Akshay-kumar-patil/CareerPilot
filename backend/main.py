@@ -3,6 +3,9 @@ Career Automation & Job Intelligence Platform — FastAPI Backend
 Main application entry point.
 """
 import logging
+import os
+import asyncio
+import httpx
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +19,25 @@ logger = logging.getLogger(__name__)
 
 
 # FIX: lifespan replaces deprecated @app.on_event("startup")
+async def ping_cron_job():
+    """Background task to keep the server awake on Render."""
+    url = os.environ.get("RENDER_EXTERNAL_URL")
+    if not url:
+        url = "https://career-portal-cxgd.onrender.com"
+        
+    cron_url = f"{url}/cron/health"
+    
+    while True:
+        # Wait 13 minutes (780 seconds)
+        await asyncio.sleep(780)
+        try:
+            async with httpx.AsyncClient() as client:
+                logger.info(f"Cron keep-alive pinging {cron_url}")
+                response = await client.get(cron_url, timeout=10.0)
+                logger.info(f"Cron keep-alive response: {response.status_code}")
+        except Exception as e:
+            logger.error(f"Cron keep-alive failed: {e}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
@@ -28,8 +50,17 @@ async def lifespan(app: FastAPI):
         f"Groq={'✓' if status.get('groq_configured') else '✗'} ({status.get('groq_model', 'llama-3.3-70b-versatile')}), "
         f"OpenAI={'✓' if status['openai_configured'] else '✗'}"
     )
+    
+    # Start the cron task
+    cron_task = asyncio.create_task(ping_cron_job())
+    
     yield
     logger.info("Shutting down...")
+    cron_task.cancel()
+    try:
+        await cron_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(
@@ -111,6 +142,12 @@ def db_health_check():
             "status": "error",
             "detail": str(exc),
         }
+
+
+@app.get("/cron/health")
+def cron_health_check():
+    """Endpoint specifically for the keep-alive cron job."""
+    return {"status": "ok", "message": "Cron job is healthy and keeping the server awake"}
 
 
 @app.get("/api/ai/status")

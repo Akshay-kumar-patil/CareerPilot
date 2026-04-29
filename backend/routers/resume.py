@@ -1,6 +1,7 @@
 """Resume generation and management API routes — MongoDB-primary."""
 import json
 import logging
+import re
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, validator
@@ -8,6 +9,7 @@ from datetime import datetime, timedelta
 from backend.models.user import user_doc_to_response
 from backend.schemas.resume import ResumeGenerateRequest, ResumeGenerateResponse, ResumeListItem
 from backend.utils.auth import get_current_user
+from backend.utils.helpers import calculate_keyword_match
 from backend.services.resume_service import resume_service
 from backend.services.file_service import file_service
 from backend.config import settings
@@ -94,6 +96,114 @@ def _merge_resume_content(content: dict, fallback_data: dict, current_user: dict
             merged[field] = fallback_value
         else:
             merged[field] = current_value if isinstance(current_value, list) else []
+
+    return merged
+
+
+def _as_list(value):
+    return value if isinstance(value, list) else []
+
+
+def _as_text(value) -> str:
+    if isinstance(value, list):
+        value = " ".join(str(item).strip() for item in value if str(item).strip())
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def _dedupe_keep_order(items: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for item in items:
+        cleaned = re.sub(r"\s+", " ", str(item or "")).strip(" -\t\r\n")
+        if not cleaned:
+            continue
+        key = cleaned.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(cleaned)
+    return result
+
+
+def _trim_summary(summary, fallback_summary="") -> str:
+    text = _as_text(summary) or _as_text(fallback_summary)
+    if not text:
+        return ""
+
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    if not sentences:
+        sentences = [text]
+
+    trimmed = " ".join(sentences[:3]).strip()
+    words = trimmed.split()
+    if len(words) > 55:
+        trimmed = " ".join(words[:55]).rstrip(",;:")
+        if trimmed and trimmed[-1] not in ".!?":
+            trimmed += "."
+    return trimmed
+
+
+def _merge_bullets(ai_bullets, fallback_bullets, max_count: int) -> list[str]:
+    merged = _dedupe_keep_order(_as_list(ai_bullets) + _as_list(fallback_bullets))
+    return merged[:max_count]
+
+
+def _normalize_experience(ai_experience, fallback_experience) -> list[dict]:
+    ai_experience = _as_list(ai_experience)
+    fallback_experience = _as_list(fallback_experience)
+    total = len(fallback_experience) if fallback_experience else len(ai_experience)
+    result = []
+
+    for idx in range(total):
+        ai_item = ai_experience[idx] if idx < len(ai_experience) and isinstance(ai_experience[idx], dict) else {}
+        fallback_item = fallback_experience[idx] if idx < len(fallback_experience) and isinstance(fallback_experience[idx], dict) else {}
+        item = {
+            "title": ai_item.get("title") or fallback_item.get("title") or "",
+            "company": ai_item.get("company") or fallback_item.get("company") or "",
+            "location": ai_item.get("location") or fallback_item.get("location") or "",
+            "dates": ai_item.get("dates") or fallback_item.get("dates") or "",
+            "bullets": _merge_bullets(ai_item.get("bullets"), fallback_item.get("bullets"), 4),
+        }
+        if item["title"] or item["company"] or item["bullets"]:
+            result.append(item)
+
+    return result
+
+
+def _normalize_projects(ai_projects, fallback_projects, has_experience: bool) -> list[dict]:
+    ai_projects = _as_list(ai_projects)
+    fallback_projects = _as_list(fallback_projects)
+    total = len(fallback_projects) if fallback_projects else len(ai_projects)
+    max_bullets = 2 if has_experience else 3
+    result = []
+
+    for idx in range(total):
+        ai_item = ai_projects[idx] if idx < len(ai_projects) and isinstance(ai_projects[idx], dict) else {}
+        fallback_item = fallback_projects[idx] if idx < len(fallback_projects) and isinstance(fallback_projects[idx], dict) else {}
+        item = {
+            "name": ai_item.get("name") or fallback_item.get("name") or "",
+            "tech_stack": ai_item.get("tech_stack") or fallback_item.get("tech_stack") or "",
+            "live_url": ai_item.get("live_url") or fallback_item.get("live_url") or "",
+            "repo_url": ai_item.get("repo_url") or fallback_item.get("repo_url") or "",
+            "bullets": _merge_bullets(ai_item.get("bullets"), fallback_item.get("bullets"), max_bullets),
+        }
+        if item["name"] or item["bullets"]:
+            result.append(item)
+
+    return result
+
+
+def _finalize_resume_content(content: dict, fallback_data: dict, current_user: dict) -> dict:
+    merged = _merge_resume_content(content, fallback_data, current_user)
+    fallback_data = fallback_data or {}
+
+    has_experience = bool(_as_list(fallback_data.get("experience")) or _as_list(merged.get("experience")))
+    merged["summary"] = _trim_summary(merged.get("summary"), fallback_data.get("summary"))
+    merged["experience"] = _normalize_experience(merged.get("experience"), fallback_data.get("experience"))
+    merged["projects"] = _normalize_projects(merged.get("projects"), fallback_data.get("projects"), has_experience)
+    merged["education"] = _as_list(merged.get("education"))
+    merged["certifications"] = _as_list(merged.get("certifications"))
+    merged["achievements"] = _dedupe_keep_order(_as_list(merged.get("achievements")))
 
     return merged
 
@@ -199,14 +309,24 @@ def generate_resume_start(
                 except Exception:
                     content = {"summary": str(content)}
 
-            content = _merge_resume_content(content, submitted_resume_data, c_user)
+            content = _finalize_resume_content(content, submitted_resume_data, c_user)
+            kw_analysis = calculate_keyword_match(
+                json.dumps(content, indent=2),
+                request_obj.job_description or "",
+            )
 
             # Persist merged content back
             from backend.database import get_resumes_collection
             from bson import ObjectId
             get_resumes_collection().update_one(
                 {"_id": ObjectId(resume["id"])},
-                {"$set": {"content": content, "raw_text": json.dumps(content, indent=2)}},
+                {"$set": {
+                    "content": content,
+                    "raw_text": json.dumps(content, indent=2),
+                    "ats_score": kw_analysis["score"],
+                    "keywords_matched": kw_analysis["matched"],
+                    "keywords_missing": kw_analysis["missing"],
+                }},
             )
 
             result_obj = ResumeGenerateResponse(
@@ -214,9 +334,9 @@ def generate_resume_start(
                 title=resume["title"],
                 content=content,
                 raw_text=json.dumps(content, indent=2),
-                ats_score=resume.get("ats_score"),
-                keywords_matched=resume.get("keywords_matched") or [],
-                keywords_missing=resume.get("keywords_missing") or [],
+                ats_score=kw_analysis["score"],
+                keywords_matched=kw_analysis["matched"],
+                keywords_missing=kw_analysis["missing"],
                 version=resume.get("version", 1),
             )
             _job_store[j_id]["status"] = "completed"

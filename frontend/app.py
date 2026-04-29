@@ -294,9 +294,9 @@ def _render_generated_resume_display(key_suffix: str = ""):
         resume_id = r.get("id")
         ats_score = r.get("ats_score") or 0
 
-        # ── ATS Score Display ──
+        # ATS Score Display
         st.markdown("---")
-        st.markdown("### 📊 ATS Score")
+        st.markdown("### ATS Score")
         score_color = "#4ECDC4" if ats_score >= 70 else ("#FFD93D" if ats_score >= 40 else "#FF6B6B")
         score_label = "Excellent" if ats_score >= 70 else ("Good" if ats_score >= 50 else ("Needs Work" if ats_score >= 30 else "Low"))
         st.markdown(f"""
@@ -310,71 +310,69 @@ def _render_generated_resume_display(key_suffix: str = ""):
         </div>
         """, unsafe_allow_html=True)
 
-        # Show keyword analysis
         kw_matched = r.get("keywords_matched", [])
         kw_missing = r.get("keywords_missing", [])
         if kw_matched:
-            with st.expander(f"✅ Matched Keywords ({len(kw_matched)})"):
+            with st.expander(f"Matched Keywords ({len(kw_matched)})"):
                 st.write(", ".join(kw_matched[:20]))
         if kw_missing:
-            with st.expander(f"❌ Missing Keywords ({len(kw_missing)})"):
+            with st.expander(f"Missing Keywords ({len(kw_missing)})"):
                 st.write(", ".join(kw_missing[:15]))
 
-        # ── PDF Preview ──
-        st.markdown("### 📄 Resume Preview")
-        pdf_cache_key = f"pdf_{resume_id}"
-        if resume_id and pdf_cache_key not in st.session_state:
-            with st.spinner("Rendering PDF preview..."):
-                st.session_state[pdf_cache_key] = api.download_resume(resume_id, "pdf")
+        # Resume Preview
+        st.markdown("### Resume Preview")
+        html_cache_key = f"resume_html_{resume_id}"
+        pdf_cache_key = f"resume_pdf_{resume_id}"
+        if resume_id and html_cache_key not in st.session_state:
+            with st.spinner("Rendering resume preview..."):
+                st.session_state[html_cache_key] = api.download_resume(resume_id, "html")
 
-        pdf_data = st.session_state.get(pdf_cache_key) if resume_id else None
+        html_data = st.session_state.get(html_cache_key) if resume_id else None
 
-        if pdf_data:
+        if html_data:
             try:
-                # Check if it's actually HTML (common fallback)
-                is_html = pdf_data.strip().startswith(b"<!DOCTYPE") or pdf_data.strip().startswith(b"<html")
-                if is_html:
-                    st.info("ℹ️ PDF engine (WeasyPrint) requires system libraries. Showing high-fidelity HTML preview instead.")
-                    import streamlit.components.v1 as components
-                    html_str = pdf_data.decode("utf-8")
-                    components.html(html_str, height=600, scrolling=True)
-                else:
-                    b64_pdf = base64.b64encode(pdf_data).decode("utf-8")
-                    st.markdown(
-                        f'<object data="data:application/pdf;base64,{b64_pdf}" type="application/pdf" width="100%" height="600px" style="border: 1px solid rgba(108, 99, 255, 0.3); border-radius: 8px;">'
-                        f'<p>It appears your browser has blocked the inline PDF preview. Please use the download button below to view it.</p>'
-                        f'</object>',
-                        unsafe_allow_html=True,
-                    )
+                st.info("Showing HTML preview. Use the PDF button below to download the final PDF resume.")
+                import base64
+                html_str = html_data.decode("utf-8")
+                b64_html = base64.b64encode(html_str.encode("utf-8")).decode("utf-8")
+                st.markdown(
+                    f"""
+                    <div style="background:#ffffff; border:1px solid #d9d9d9; border-radius:12px; padding:16px; box-shadow:0 8px 24px rgba(0,0,0,0.08);">
+                        <iframe
+                            src="data:text/html;base64,{b64_html}"
+                            width="100%"
+                            height="600px"
+                            style="border:none; background:#ffffff; border-radius:8px;"
+                        ></iframe>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
             except Exception as e:
                 st.error(f"Error rendering preview: {e}")
         else:
-            # Fallback: Show resume content as formatted text
             content = r.get("content", {})
             if content:
                 st.markdown(f"**{content.get('full_name', '')}**")
-                # Summary stabilization
                 raw_summary = content.get("summary", "")
-                if isinstance(raw_summary, list):
-                    summary_text = " ".join(raw_summary)
-                else:
-                    summary_text = str(raw_summary)
+                summary_text = " ".join(raw_summary) if isinstance(raw_summary, list) else str(raw_summary)
                 if summary_text:
                     st.write(summary_text)
-                st.caption("⚠️ PDF preview not available. Download the resume to view the full formatted version.")
+                st.caption("Resume preview is not available right now, but you can still download the PDF below.")
 
-        # ── Download Buttons ──
-        st.markdown("### 📥 Download Resume")
+        # Download Buttons
+        st.markdown("### Download Resume")
         dc1, dc2 = st.columns(2)
         if resume_id:
             with dc1:
+                if pdf_cache_key not in st.session_state:
+                    with st.spinner("Preparing PDF download..."):
+                        st.session_state[pdf_cache_key] = api.download_resume(resume_id, "pdf")
+                pdf_data = st.session_state.get(pdf_cache_key)
                 if pdf_data:
-                    is_html = pdf_data.strip().startswith(b"<!DOCTYPE") or pdf_data.strip().startswith(b"<html")
-                    ext = "html" if is_html else "pdf"
-                    mime = "text/html" if is_html else "application/pdf"
                     st.download_button(
-                        f"📥 Download {ext.upper()}", pdf_data,
-                        f"Resume_{resume_id}.{ext}", mime,
+                        "Download PDF", pdf_data,
+                        f"Resume_{resume_id}.pdf", "application/pdf",
                         key=f"dl_pdf_gen_helper_{resume_id}_{key_suffix}", type="primary", use_container_width=True
                     )
             with dc2:
@@ -384,13 +382,13 @@ def _render_generated_resume_display(key_suffix: str = ""):
                 data_docx = st.session_state.get(docx_key)
                 if data_docx:
                     st.download_button(
-                        "📥 Download DOCX", data_docx,
+                        "Download DOCX", data_docx,
                         f"Resume_{resume_id}.docx",
                         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         key=f"dl_docx_gen_helper_{resume_id}_{key_suffix}", use_container_width=True
                     )
 
-        st.success(f"✅ Resume generated successfully! ATS Score: {ats_score}/100")
+        st.success(f"Resume generated successfully! ATS Score: {ats_score}/100")
 
 
 def main():

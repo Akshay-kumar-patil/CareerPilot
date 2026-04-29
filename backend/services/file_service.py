@@ -4,6 +4,7 @@ import uuid
 import logging
 from pathlib import Path
 from typing import Optional
+from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader
 from backend.config import settings
 
@@ -21,6 +22,117 @@ MAX_TXT_SIZE = 2 * 1024 * 1024  # 2MB
 
 
 class FileService:
+    @staticmethod
+    def _pdf_escape(text: str) -> str:
+        return (
+            str(text or "")
+            .replace("\\", "\\\\")
+            .replace("(", "\\(")
+            .replace(")", "\\)")
+        )
+
+    def _generate_simple_pdf(self, text_content: str, filepath: str) -> str:
+        """Generate a basic text PDF without external system libraries."""
+        lines = []
+        for raw_line in str(text_content or "").splitlines():
+            stripped = raw_line.strip()
+            if not stripped:
+                lines.append("")
+                continue
+
+            words = stripped.split()
+            current = []
+            current_len = 0
+            for word in words:
+                projected = current_len + len(word) + (1 if current else 0)
+                if projected > 95:
+                    lines.append(" ".join(current))
+                    current = [word]
+                    current_len = len(word)
+                else:
+                    current.append(word)
+                    current_len = projected
+            if current:
+                lines.append(" ".join(current))
+
+        if not lines:
+            lines = ["Resume"]
+
+        pages = []
+        line_height = 14
+        max_lines_per_page = 48
+        for start in range(0, len(lines), max_lines_per_page):
+            pages.append(lines[start:start + max_lines_per_page])
+
+        objects = []
+
+        def add_object(payload: str) -> int:
+            objects.append(payload)
+            return len(objects)
+
+        font_id = add_object("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+        page_ids = []
+
+        for page_lines in pages:
+            content_commands = ["BT", "/F1 11 Tf", "72 770 Td"]
+            first_line = True
+            for line in page_lines:
+                escaped = self._pdf_escape(line)
+                if first_line:
+                    content_commands.append(f"({escaped}) Tj")
+                    first_line = False
+                else:
+                    content_commands.append(f"0 -{line_height} Td")
+                    content_commands.append(f"({escaped}) Tj")
+            content_commands.append("ET")
+            content_stream = "\n".join(content_commands)
+            content_id = add_object(
+                f"<< /Length {len(content_stream.encode('utf-8'))} >>\nstream\n{content_stream}\nendstream"
+            )
+            page_id = add_object(
+                f"<< /Type /Page /Parent {{PAGES_ID}} 0 R /MediaBox [0 0 595 842] "
+                f"/Resources << /Font << /F1 {font_id} 0 R >> >> /Contents {content_id} 0 R >>"
+            )
+            page_ids.append(page_id)
+
+        kids = " ".join(f"{page_id} 0 R" for page_id in page_ids)
+        pages_id = add_object(f"<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>")
+
+        for idx, payload in enumerate(objects):
+            if "{PAGES_ID}" in payload:
+                objects[idx] = payload.replace("{PAGES_ID}", str(pages_id))
+
+        catalog_id = add_object(f"<< /Type /Catalog /Pages {pages_id} 0 R >>")
+
+        pdf_parts = ["%PDF-1.4\n"]
+        offsets = [0]
+        current_offset = len(pdf_parts[0].encode("utf-8"))
+
+        for object_id, payload in enumerate(objects, start=1):
+            obj_str = f"{object_id} 0 obj\n{payload}\nendobj\n"
+            offsets.append(current_offset)
+            pdf_parts.append(obj_str)
+            current_offset += len(obj_str.encode("utf-8"))
+
+        xref_offset = current_offset
+        xref_lines = [f"xref\n0 {len(objects) + 1}\n", "0000000000 65535 f \n"]
+        for offset in offsets[1:]:
+            xref_lines.append(f"{offset:010d} 00000 n \n")
+        trailer = (
+            f"trailer\n<< /Size {len(objects) + 1} /Root {catalog_id} 0 R >>\n"
+            f"startxref\n{xref_offset}\n%%EOF"
+        )
+        pdf_parts.extend(xref_lines)
+        pdf_parts.append(trailer)
+
+        with open(filepath, "wb") as f:
+            f.write("".join(pdf_parts).encode("utf-8"))
+
+        return filepath
+
+    def _generate_pdf_fallback_from_html(self, html_content: str, filepath: str) -> str:
+        text_content = BeautifulSoup(html_content, "html.parser").get_text("\n")
+        return self._generate_simple_pdf(text_content, filepath)
 
     def render_template(self, template_name: str, context: dict) -> str:
         """Render an HTML template with context data."""
@@ -101,20 +213,15 @@ class FileService:
                 logger.info(f"PDF generated via pdfkit: {filepath}")
                 return filepath
             except (ImportError, Exception) as e2:
-                logger.warning(f"pdfkit also failed: {e2}. Saving as HTML fallback.")
-                html_path = filepath.replace(".pdf", ".html")
-                with open(html_path, "w", encoding="utf-8") as f:
-                    f.write(html_content)
-                logger.info(f"HTML fallback generated: {html_path}")
-                return html_path
+                logger.warning(f"pdfkit also failed: {e2}. Using built-in text PDF fallback.")
+                fallback_path = self._generate_pdf_fallback_from_html(html_content, filepath)
+                logger.info(f"Fallback PDF generated: {fallback_path}")
+                return fallback_path
         except Exception as e:
             logger.error(f"PDF generation error: {e}")
-            # Fallback: save HTML
-            html_path = filepath.replace(".pdf", ".html")
-            with open(html_path, "w", encoding="utf-8") as f:
-                f.write(html_content)
-            logger.info(f"HTML fallback generated due to error: {html_path}")
-            return html_path
+            fallback_path = self._generate_pdf_fallback_from_html(html_content, filepath)
+            logger.info(f"Fallback PDF generated due to error: {fallback_path}")
+            return fallback_path
 
     def generate_docx(self, resume_data: dict, filename: Optional[str] = None) -> str:
         """Generate DOCX from resume data. Returns file path."""

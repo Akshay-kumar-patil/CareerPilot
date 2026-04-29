@@ -49,12 +49,14 @@ def _init_mongo():
         return _mongo_db
 
     try:
+        import ssl
         _mongo_client = MongoClient(
             settings.MONGODB_URL,
             serverSelectionTimeoutMS=10_000,
             connectTimeoutMS=10_000,
             socketTimeoutMS=20_000,
-            tlsCAFile=certifi.where(),          # Fixes SSL on Windows
+            tls=True,
+            tlsAllowInvalidCertificates=True,   # Workaround for OpenSSL 1.1.1 on Windows
         )
         _mongo_client.admin.command("ping")     # Fail fast if unreachable
         _mongo_db = _mongo_client[settings.MONGODB_DB_NAME]

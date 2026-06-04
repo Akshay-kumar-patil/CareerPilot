@@ -139,7 +139,6 @@ career-platform/
 |-- data/                   # generated files, uploads, local storage
 |-- docs/                   # product and branding notes
 |-- requirements.txt
-|-- docker-compose.yml
 `-- README.md
 ```
 

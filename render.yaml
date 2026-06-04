@@ -1,14 +1,16 @@
-# render.yaml — Render deployment configuration
+# Render deployment configuration without Docker.
 services:
   - type: web
     name: career-platform-api
-    runtime: docker
+    runtime: python
     plan: free
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: PORT
-        value: "8000"
       - key: PYTHON_VERSION
         value: "3.11.0"
+      - key: PYTHONPATH
+        value: "."
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL
@@ -24,17 +26,18 @@ services:
       - key: DEFAULT_MODEL_PROVIDER
         value: "gemini"
       - key: MONGODB_URL
-        value: "mongodb+srv://akshaykumarpatil58_db_user:s0FStjjifYMfpTBO@spendlyai.tflghsc.mongodb.net/"
+        sync: false
 
   - type: web
     name: career-platform-ui
-    runtime: docker
-    dockerfilePath: Dockerfile.frontend
+    runtime: python
     plan: free
+    buildCommand: pip install --upgrade pip && pip install -r frontend/requirements.txt
+    startCommand: streamlit run frontend/app.py --server.port=$PORT --server.address=0.0.0.0
     envVars:
-      - key: PORT
-        value: "8501"
-      - key: API_BASE_URL
-        value: "https://career-portal-cxgd.onrender.com"
       - key: PYTHON_VERSION
         value: "3.11.0"
+      - key: PYTHONPATH
+        value: "."
+      - key: API_BASE_URL
+        value: "https://career-portal-cxgd.onrender.com"

@@ -5,7 +5,6 @@ SQLAlchemy/SQLite kept only for legacy models (applications, referrals).
 import os
 import logging
 import certifi
-import chromadb
 from pymongo import MongoClient, ASCENDING
 from pymongo.errors import ConnectionFailure, OperationFailure
 from sqlalchemy import create_engine
@@ -112,7 +111,12 @@ def _init_chroma_client():
     global chroma_client
     if chroma_client is not None:
         return chroma_client
+    if not settings.ENABLE_VECTOR_DB:
+        logger.info("Vector DB disabled; ChromaDB will not be initialized.")
+        chroma_client = False
+        return chroma_client
     try:
+        import chromadb
         chroma_client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR)
     except Exception as e:
         logger.warning("ChromaDB unavailable; semantic search disabled. Error: %s", e)
@@ -137,5 +141,6 @@ def init_db():
     from backend.models import application, referral, template  # noqa: F401
     Base.metadata.create_all(bind=engine)
 
-    _init_chroma_client()
+    if settings.ENABLE_VECTOR_DB:
+        _init_chroma_client()
     _init_mongo()

@@ -11,6 +11,10 @@ services:
         value: "3.11.0"
       - key: PYTHONPATH
         value: "."
+      - key: DEBUG
+        value: "false"
+      - key: ENABLE_VECTOR_DB
+        value: "false"
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL
@@ -40,4 +44,4 @@ services:
       - key: PYTHONPATH
         value: "."
       - key: API_BASE_URL
-        value: "https://career-portal-cxgd.onrender.com"
+        value: "https://careerpilot-4ygm.onrender.com"

@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: Optional[str] = None
     GOOGLE_CLIENT_SECRET: Optional[str] = None
     GOOGLE_REDIRECT_URI: str = "https://careerpilot-4ygm.onrender.com/api/auth/google/callback"
-    FRONTEND_URL: str = "https://akshay-kumar-patil-career-portal-frontendapp-gkbra3.streamlit.app"
+    FRONTEND_URL: str = "https://careerpilot-by-akki.streamlit.app"
 
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_MODEL: str = "gemini-2.5-flash"  # Updated to latest Gemini model
@@ -74,7 +74,7 @@ class Settings(BaseSettings):
 
     # FIX: typed as List[str] so CORS_ORIGINS works correctly with middleware
     CORS_ORIGINS: List[str] = [
-        "https://akshay-kumar-patil-career-portal-frontendapp-gkbra3.streamlit.app",
+        "https://careerpilot-by-akki.streamlit.app",
         "https://careerpilot-4ygm.onrender.com",
         "http://localhost:8502",
         "http://localhost:3000",

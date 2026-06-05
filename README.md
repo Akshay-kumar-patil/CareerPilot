@@ -232,7 +232,7 @@ Operational endpoints:
 
 Frontend:
 
-- [Streamlit app](https://akshay-kumar-patil-career-portal-frontendapp-gkbra3.streamlit.app/)
+- [Streamlit app](https://careerpilot-by-akki.streamlit.app/)
 
 Backend:
 

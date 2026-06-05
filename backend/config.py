@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # Google OAuth
     GOOGLE_CLIENT_ID: Optional[str] = None
     GOOGLE_CLIENT_SECRET: Optional[str] = None
-    GOOGLE_REDIRECT_URI: str = "https://career-portal-cxgd.onrender.com/api/auth/google/callback"
+    GOOGLE_REDIRECT_URI: str = "https://careerpilot-4ygm.onrender.com/api/auth/google/callback"
     FRONTEND_URL: str = "https://akshay-kumar-patil-career-portal-frontendapp-gkbra3.streamlit.app"
 
     GEMINI_API_KEY: Optional[str] = None
@@ -75,11 +75,13 @@ class Settings(BaseSettings):
     # FIX: typed as List[str] so CORS_ORIGINS works correctly with middleware
     CORS_ORIGINS: List[str] = [
         "https://akshay-kumar-patil-career-portal-frontendapp-gkbra3.streamlit.app",
+        "https://careerpilot-4ygm.onrender.com",
         "http://localhost:8502",
         "http://localhost:3000",
         "https://career-portal-m5re.onrender.com",
     ]
 
+    ENABLE_VECTOR_DB: bool = False
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
 
     class Config:
@@ -98,8 +100,10 @@ if not settings.DEBUG and settings.SECRET_KEY == _DEFAULT_SECRET:
     )
 
 # Ensure required directories exist
-for dir_path in [settings.UPLOAD_DIR, settings.GENERATED_DIR, settings.CHROMA_PERSIST_DIR]:
+for dir_path in [settings.UPLOAD_DIR, settings.GENERATED_DIR]:
     os.makedirs(dir_path, exist_ok=True)
+if settings.ENABLE_VECTOR_DB:
+    os.makedirs(settings.CHROMA_PERSIST_DIR, exist_ok=True)
 
 # Log configuration on startup (only in debug mode)
 if settings.DEBUG:
